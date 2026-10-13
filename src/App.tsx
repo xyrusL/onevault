@@ -48,8 +48,16 @@ export const App: React.FC = () => {
     const handlePopState = () => {
       setCurrentPath(getNormalizedPath());
     };
+    const handleSessionUpdate = () => {
+      setSession(authService.getSession());
+    };
+
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('onevault-session-updated', handleSessionUpdate);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('onevault-session-updated', handleSessionUpdate);
+    };
   }, []);
 
   const handleGoHome = () => {

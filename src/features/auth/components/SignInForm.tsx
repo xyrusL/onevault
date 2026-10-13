@@ -5,10 +5,12 @@ import {
   EnvelopeSimple,
   Eye,
   EyeSlash,
+  Fingerprint,
   LockSimple,
   WarningCircle,
 } from '@phosphor-icons/react';
 import { authService } from '../services/auth.service';
+import { passkeyService } from '../../settings/services/passkey.service';
 import { AuthSession } from '../types/auth.types';
 
 interface SignInFormProps {
@@ -21,6 +23,30 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasskeySubmitting, setIsPasskeySubmitting] = useState(false);
+
+  const isWebAuthnSupported = passkeyService.isSupported();
+
+  const handlePasskeySignIn = async () => {
+    setErrorMessage(null);
+    setIsPasskeySubmitting(true);
+    try {
+      const session = await authService.signInWithPasskey();
+      onSuccess(session);
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError') {
+        // User closed or dismissed the browser prompt
+        return;
+      }
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : 'Passkey verification failed. Please try again or use your password.'
+      );
+    } finally {
+      setIsPasskeySubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +68,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       {errorMessage && (
         <div
           role="alert"
@@ -52,6 +78,41 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
           <span>{errorMessage}</span>
         </div>
       )}
+
+      {/* WebAuthn / Passkey Sign-In Button */}
+      {isWebAuthnSupported && (
+        <>
+          <button
+            type="button"
+            onClick={handlePasskeySignIn}
+            disabled={isSubmitting || isPasskeySubmitting}
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-default bg-surface hover:bg-elevated hover:border-accent text-fg-primary py-2.5 px-4 text-sm font-medium transition-all duration-150 focus:outline-none focus:ring-3 focus:ring-accent-ring disabled:opacity-60 cursor-pointer shadow-2xs group"
+          >
+            {isPasskeySubmitting ? (
+              <CircleNotch size={18} weight="bold" className="animate-spin text-accent" />
+            ) : (
+              <Fingerprint
+                size={19}
+                weight="duotone"
+                className="text-accent shrink-0 group-hover:scale-110 transition-transform"
+              />
+            )}
+            <span>
+              {isPasskeySubmitting ? 'Waiting for Passkey...' : 'Sign in with Passkey'}
+            </span>
+          </button>
+
+          <div className="relative flex items-center justify-center py-0.5">
+            <div className="border-t border-subtle w-full" />
+            <span className="bg-surface px-2.5 text-[10px] font-mono uppercase tracking-wider text-fg-muted shrink-0">
+              or with password
+            </span>
+            <div className="border-t border-subtle w-full" />
+          </div>
+        </>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
 
       {/* Email Field */}
       <div className="space-y-1.5">
@@ -78,7 +139,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@admin.com"
+            placeholder="admin@example.com"
             className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid pl-10 pr-3.5 py-2.5 text-base text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none focus:ring-3 focus:ring-accent-ring transition-all"
           />
         </div>
@@ -148,5 +209,6 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
         </button>
       </div>
     </form>
-  );
+  </div>
+);
 };

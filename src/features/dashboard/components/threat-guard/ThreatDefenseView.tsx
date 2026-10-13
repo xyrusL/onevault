@@ -449,52 +449,116 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
         {/* TAB 1: LIVE INCIDENTS FEED */}
         {activeVectorTab === 'feed' && (
           <div className="space-y-1.5">
-            {telemetry.recentActors.map((actor) => {
-              const badge = getActionBadge(actor.action);
-              return (
-                <div
-                  key={actor.id}
-                  onClick={() => setSelectedIncident(actor)}
-                  className="rounded-xl border border-white/5 bg-[#0b0b10] p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-cyan-500/40 transition-colors cursor-pointer group"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-[10px] font-mono font-bold text-white group-hover:border-cyan-500/40">
-                      {actor.countryCode}
+            {telemetry.recentActors.length === 0 ? (
+              <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-[#070b0e] p-6 text-center space-y-3">
+                {/* Cyber Defense Radar & Grid Background */}
+                <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-64 w-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-48 w-48 rounded-full bg-cyan-500/10 blur-2xl pointer-events-none" />
+
+                  <svg className="absolute inset-0 h-full w-full opacity-35" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                      <pattern id="cyber-grid" width="28" height="28" patternUnits="userSpaceOnUse">
+                        <path d="M 28 0 L 0 0 0 28" fill="none" stroke="rgba(16, 185, 129, 0.12)" strokeWidth="0.8" />
+                        <circle cx="14" cy="14" r="0.75" fill="rgba(6, 182, 212, 0.25)" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#cyber-grid)" />
+                    <circle cx="50%" cy="38%" r="42" fill="none" stroke="rgba(16, 185, 129, 0.25)" strokeWidth="1" strokeDasharray="3 3" />
+                    <circle cx="50%" cy="38%" r="85" fill="none" stroke="rgba(6, 182, 212, 0.18)" strokeWidth="1" />
+                    <circle cx="50%" cy="38%" r="140" fill="none" stroke="rgba(16, 185, 129, 0.10)" strokeWidth="0.8" strokeDasharray="6 6" />
+                    <line x1="50%" y1="0" x2="50%" y2="100%" stroke="rgba(16, 185, 129, 0.08)" strokeWidth="1" />
+                  </svg>
+
+                  <span className="absolute top-2 left-2 font-mono text-[9px] text-emerald-500/40 select-none">┌─ [SEC-01]</span>
+                  <span className="absolute top-2 right-2 font-mono text-[9px] text-cyan-500/40 select-none">[DEF-ACT] ─┐</span>
+                  <span className="absolute bottom-2 left-2 font-mono text-[9px] text-emerald-500/40 select-none">└─ [CLEAN]</span>
+                  <span className="absolute bottom-2 right-2 font-mono text-[9px] text-cyan-500/40 select-none">[ONLINE] ─┘</span>
+                </div>
+
+                {/* Content */}
+                <div className="relative z-10 space-y-3">
+                  <div className="relative mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.22)]">
+                    <ShieldCheck size={26} weight="duotone" />
+                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
                     </span>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold font-mono text-white group-hover:text-cyan-300 transition-colors">
-                          {actor.actorIp}
-                        </span>
-                        <span className="text-[11px] text-zinc-400 truncate">
-                          · {actor.countryName} ({actor.asnOrg})
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-zinc-400">
-                        <span className="text-zinc-300 font-semibold">{actor.detectionVector}</span>
-                        <span>·</span>
-                        <span className="truncate max-w-[240px] text-cyan-300">
-                          {actor.targetPaths.join(', ')}
-                        </span>
-                      </div>
-                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[10px] font-mono text-zinc-400">
-                      Score: <strong className="text-white">{actor.riskScore}</strong>
+                  <div className="max-w-md mx-auto space-y-1">
+                    <h4 className="font-mono text-xs font-bold uppercase tracking-wider text-emerald-300">
+                      Zero Active Threats · Edge Sentinel Active
+                    </h4>
+                    <p className="font-mono text-[11px] text-zinc-400 leading-relaxed">
+                      All endpoints clean and verified. Real-time behavioral scrutiny and edge DDoS defense are running.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold shadow-xs">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      <span>Edge Shield: 100% Clean</span>
                     </span>
-                    <span
-                      className={`rounded-md border px-2 py-0.5 text-[9.5px] font-mono font-bold whitespace-nowrap ${badge.classes}`}
-                    >
-                      {badge.label}
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold shadow-xs">
+                      <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                      <span>0 Quarantined Actors</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono bg-white/5 text-zinc-300 border border-white/10 font-semibold shadow-xs">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      <span>Real-Time Defense</span>
                     </span>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              telemetry.recentActors.map((actor) => {
+                const badge = getActionBadge(actor.action);
+                return (
+                  <div
+                    key={actor.id}
+                    onClick={() => setSelectedIncident(actor)}
+                    className="rounded-xl border border-white/5 bg-[#0b0b10] p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:border-cyan-500/40 transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="inline-flex h-6 w-7 shrink-0 items-center justify-center rounded-md border border-white/15 bg-white/5 text-[10px] font-mono font-bold text-white group-hover:border-cyan-500/40">
+                        {actor.countryCode}
+                      </span>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold font-mono text-white group-hover:text-cyan-300 transition-colors">
+                            {actor.actorIp}
+                          </span>
+                          <span className="text-[11px] text-zinc-400 truncate">
+                            · {actor.countryName} ({actor.asnOrg})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] font-mono text-zinc-400">
+                          <span className="text-zinc-300 font-semibold">{actor.detectionVector}</span>
+                          <span>·</span>
+                          <span className="truncate max-w-[240px] text-cyan-300">
+                            {actor.targetPaths.join(', ')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[10px] font-mono text-zinc-400">
+                        Score: <strong className="text-white">{actor.riskScore}</strong>
+                      </span>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-[9.5px] font-mono font-bold whitespace-nowrap ${badge.classes}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
 

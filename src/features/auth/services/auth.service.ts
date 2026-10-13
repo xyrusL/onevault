@@ -1,5 +1,6 @@
 import { apiRequest } from '../../../shared/services/api-client.service';
 import { AuthCredentials, AuthSession } from '../types/auth.types';
+import { passkeyService } from '../../settings/services/passkey.service';
 
 const AUTH_SESSION_STORAGE_KEY = 'onevault-auth-session';
 
@@ -15,9 +16,24 @@ export const authService = {
     return session;
   },
 
+  /** Signs in passwordlessly using WebAuthn / Passkey (`POST /api/auth/passkey/login-options` + `login-verify`). */
+  async signInWithPasskey(): Promise<AuthSession> {
+    const session = await passkeyService.signInWithPasskey();
+    return session;
+  },
+
+  /** Check if any passkeys are enrolled in this vault. */
+  async checkPasskeyAvailability(): Promise<boolean> {
+    const status = await passkeyService.checkStatus();
+    return status.hasPasskeys;
+  },
+
   saveSession(session: AuthSession): void {
     try {
       localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('onevault-session-updated', { detail: session }));
+      }
     } catch {
       // ignore storage errors
     }

@@ -6,7 +6,116 @@ import { edgeDefenseService } from '../services/edge-defense.service';
 import { threatGuardService } from '../services/threat-guard.service';
 import type { AppBindings } from '../types/env.types';
 
+import { passkeyService } from '../services/passkey.service';
+
 export const authRoutes = new Hono<AppBindings>();
+
+/**
+ * Public Passkey Endpoints
+ */
+authRoutes.get('/passkey/status', async (c) => {
+  const hasPasskeys = await passkeyService.hasAnyPasskey(c.env);
+  return c.json({ hasPasskeys });
+});
+
+authRoutes.post('/passkey/login-options', async (c) => {
+  const origin = c.req.header('origin');
+  const host = c.req.header('host');
+  const rpInfo = passkeyService.getRPInfo(origin, host, c.req.url);
+
+  const options = await passkeyService.generateLoginOptions(c.env, rpInfo);
+  return c.json(options);
+});
+
+authRoutes.post('/passkey/login-verify', async (c) => {
+  const body = await c.req.json<{ response: any }>().catch(() => ({ response: null }));
+  if (!body.response) {
+    throw new HttpError(400, 'Invalid passkey assertion response.');
+  }
+
+  const origin = c.req.header('origin');
+  const host = c.req.header('host');
+  const rpInfo = passkeyService.getRPInfo(origin, host, c.req.url);
+
+  const clientIp =
+    c.req.header('CF-Connecting-IP') ||
+    c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ||
+    '127.0.0.1';
+
+  const { email, passkeyName } = await passkeyService.verifyLogin(
+    c.env,
+    { response: body.response },
+    rpInfo
+  );
+
+  // Clear threat guard on successful passkey login
+  threatGuardService.resetActorProfile(clientIp);
+
+  const token = await authService.createToken(c.env, email);
+  edgeDefenseService.pinNewDeviceToken(token, c.req.header('User-Agent'));
+
+  return c.json({
+    token,
+    email,
+    passkeyName,
+    message: `Signed in with passkey "${passkeyName}".`,
+  });
+});
+
+/**
+ * Authenticated Passkey Endpoints
+ */
+authRoutes.get('/passkey/list', requireAuth, async (c) => {
+  const email = c.get('userEmail') || c.env.ADMIN_EMAIL || 'admin@admin.com';
+  const passkeys = await passkeyService.listPasskeys(c.env, email);
+  return c.json(passkeys);
+});
+
+authRoutes.post('/passkey/register-options', requireAuth, async (c) => {
+  const email = c.get('userEmail') || c.env.ADMIN_EMAIL || 'admin@admin.com';
+  const origin = c.req.header('origin');
+  const host = c.req.header('host');
+  const rpInfo = passkeyService.getRPInfo(origin, host, c.req.url);
+
+  const options = await passkeyService.generateRegistrationOptions(c.env, email, rpInfo);
+  return c.json(options);
+});
+
+authRoutes.post('/passkey/register-verify', requireAuth, async (c) => {
+  const email = c.get('userEmail') || c.env.ADMIN_EMAIL || 'admin@admin.com';
+  const body = await c.req
+    .json<{ response: any; name?: string }>()
+    .catch(() => ({ response: null, name: '' }));
+
+  if (!body.response) {
+    throw new HttpError(400, 'Invalid passkey registration credential payload.');
+  }
+
+  const origin = c.req.header('origin');
+  const host = c.req.header('host');
+  const rpInfo = passkeyService.getRPInfo(origin, host, c.req.url);
+  const userAgent = c.req.header('User-Agent') || undefined;
+
+  const result = await passkeyService.verifyRegistration(
+    c.env,
+    email,
+    { response: body.response, name: body.name, userAgent },
+    rpInfo
+  );
+
+  return c.json(result);
+});
+
+authRoutes.delete('/passkey/:id', requireAuth, async (c) => {
+  const email = c.get('userEmail') || c.env.ADMIN_EMAIL || 'admin@admin.com';
+  const credentialId = c.req.param('id');
+  if (!credentialId) {
+    throw new HttpError(400, 'Credential ID is required.');
+  }
+
+  await passkeyService.deletePasskey(c.env, email, credentialId);
+  return c.json({ success: true, message: 'Passkey removed successfully.' });
+});
 
 authRoutes.post('/login', async (c) => {
   const body = await c.req

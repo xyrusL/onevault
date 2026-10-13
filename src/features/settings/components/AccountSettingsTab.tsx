@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import { settingsService } from '../services/settings.service';
 import type { AdminAccount } from '../types/settings.types';
+import { PasskeysSection } from './passkeys';
 
 interface AccountSettingsTabProps {
   onNavigateToBackup?: () => void;
@@ -324,6 +325,9 @@ export const AccountSettingsTab: React.FC<AccountSettingsTabProps> = ({
               </div>
             </form>
           </div>
+
+          {/* Passkeys & Passwordless Sign-In Section */}
+          <PasskeysSection />
         </div>
 
         {/* Right Column (Security Posture, Audit & Recommendations) */}
@@ -359,6 +363,16 @@ export const AccountSettingsTab: React.FC<AccountSettingsTabProps> = ({
             </div>
 
             <div className="space-y-3 text-xs font-mono">
+              <div className="flex items-start gap-2.5">
+                <CheckCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" weight="fill" />
+                <div>
+                  <div className="text-fg-primary font-semibold">FIDO2 Passkeys Verification</div>
+                  <div className="text-[11px] text-fg-muted mt-0.5">
+                    Hardware-bound public-key biometrics defend against phishing.
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-start gap-2.5">
                 <CheckCircle size={14} className="text-emerald-500 shrink-0 mt-0.5" weight="fill" />
                 <div>

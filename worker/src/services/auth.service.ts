@@ -83,8 +83,17 @@ export const authService = {
       }
     }
 
-    // 2. Fallback to env variables (ADMIN_EMAIL & ADMIN_PASSWORD)
+    // 2. Fallback to env variables (ADMIN_EMAIL & ADMIN_PASSWORD) - only for initial bootstrap if DB is empty
     if (env.ADMIN_EMAIL && env.ADMIN_PASSWORD && env.SESSION_SECRET) {
+      if (env.DB) {
+        const count = await env.DB.prepare('SELECT count(*) as c FROM admin_users')
+          .first<{ c: number }>()
+          .catch(() => null);
+        if (count && count.c > 0) {
+          return false;
+        }
+      }
+
       const emailOk = await safeEqual(
         normalizedEmail,
         env.ADMIN_EMAIL.trim().toLowerCase(),
@@ -187,19 +196,58 @@ export const authService = {
         }
       }
 
+      // Find user by email or fallback to first admin account (usr_admin_default)
+      const targetUser = await env.DB.prepare(
+        'SELECT id FROM admin_users WHERE lower(email) = ? LIMIT 1'
+      )
+        .bind(currentEmail.toLowerCase())
+        .first<{ id: string }>();
+
+      const targetId = targetUser?.id || 'usr_admin_default';
+
       if (payload.newPassword) {
         const newHash = await sha256Hex(payload.newPassword);
-        await env.DB.prepare(
-          'UPDATE admin_users SET email = ?, password_hash = ? WHERE lower(email) = ?'
+        const updateRes = await env.DB.prepare(
+          'UPDATE admin_users SET email = ?, password_hash = ? WHERE id = ?'
         )
-          .bind(updatedEmail, newHash, currentEmail.toLowerCase())
+          .bind(updatedEmail, newHash, targetId)
           .run();
+
+        if (!updateRes.meta.changes) {
+          await env.DB.prepare(
+            'INSERT INTO admin_users (id, email, password_hash, role) VALUES (?, ?, ?, ?)'
+          )
+            .bind(targetId, updatedEmail, newHash, 'admin')
+            .run();
+        }
       } else if (payload.newEmail) {
-        await env.DB.prepare(
-          'UPDATE admin_users SET email = ? WHERE lower(email) = ?'
+        const updateRes = await env.DB.prepare(
+          'UPDATE admin_users SET email = ? WHERE id = ?'
         )
-          .bind(updatedEmail, currentEmail.toLowerCase())
+          .bind(updatedEmail, targetId)
           .run();
+
+        if (!updateRes.meta.changes) {
+          const currentHash = await sha256Hex(payload.currentPassword);
+          await env.DB.prepare(
+            'INSERT INTO admin_users (id, email, password_hash, role) VALUES (?, ?, ?, ?)'
+          )
+            .bind(targetId, updatedEmail, currentHash, 'admin')
+            .run();
+        }
+      }
+
+      // Automatically migrate any enrolled passkeys to the new email
+      if (payload.newEmail && payload.newEmail.toLowerCase() !== currentEmail.toLowerCase()) {
+        try {
+          await env.DB.prepare(
+            'UPDATE passkeys SET user_id = ? WHERE lower(user_id) = ?'
+          )
+            .bind(updatedEmail, currentEmail.toLowerCase())
+            .run();
+        } catch {
+          // ignore if passkeys table doesn't exist
+        }
       }
     }
 
