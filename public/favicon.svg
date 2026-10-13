@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="#09090B"/>
+  <!-- Outer architectural hexagonal vault frame -->
+  <path
+    d="M32 10L51 21V43L32 54L13 43V21L32 10Z"
+    stroke="#FAFAFA"
+    stroke-width="3.75"
+    stroke-linejoin="round"
+  />
+  <!-- Inner geometric '1' + 'V' vault lock core -->
+  <path
+    d="M22.5 25.5L32 41.5L41.5 25.5"
+    stroke="#FAFAFA"
+    stroke-width="3.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M32 18V30"
+    stroke="#FAFAFA"
+    stroke-width="3.75"
+    stroke-linecap="round"
+  />
+  <circle cx="32" cy="18" r="2.5" fill="#FAFAFA"/>
+</svg>

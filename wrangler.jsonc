@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "onevault-worker",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-10-01",
+
+  // React site (built by `vite build`). Only /api/* hits the worker code;
+  // every other path is served straight from static assets (SPA fallback).
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Public config. Secrets (CF_API_TOKEN, ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET)
+  // live in .env locally and `wrangler secret bulk .env` in production.
+  "vars": {
+    "CF_ACCOUNT_ID": "4002cabf9107796667c42a5eed175298",
+    "WORKER_NAME": "onevault-worker"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "onevault-storage",
+      "database_id": "0a658c57-acb5-4ce8-885a-446d9e8541c5",
+      "migrations_dir": "worker/migrations"
+    }
+  ],
+
+  "observability": { "enabled": true }
+}
