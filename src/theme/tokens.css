@@ -195,7 +195,7 @@ body {
 }
 
 /* Optical SVG icon alignment inside flex buttons & rows */
-svg {
+svg:not(.hidden) {
   display: block;
   flex-shrink: 0;
 }
@@ -273,6 +273,17 @@ button:active:not(:disabled) {
 ::-webkit-scrollbar-thumb {
   background: var(--border-default);
   border-radius: 9999px;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 @keyframes spin {

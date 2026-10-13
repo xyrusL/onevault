@@ -17,7 +17,7 @@ interface RecordRowProps {
   onDelete: (record: DomainRecordItem) => void;
 }
 
-const TYPE_COLORS: Partial<Record<DnsRecordType, string>> = {
+export const TYPE_COLORS: Partial<Record<DnsRecordType, string>> = {
   A: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   AAAA: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
   CNAME: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
@@ -34,7 +34,7 @@ const TYPE_COLORS: Partial<Record<DnsRecordType, string>> = {
   URI: 'bg-lime-500/10 text-lime-400 border-lime-500/20',
 };
 
-function getTxtCategoryBadge(name: string, content: string) {
+export function getTxtCategoryBadge(name: string, content: string) {
   const lowerName = name.toLowerCase();
   const lowerContent = content.toLowerCase();
   if (lowerContent.includes('v=spf1')) {

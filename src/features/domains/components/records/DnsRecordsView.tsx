@@ -1,9 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ArrowSquareOut,
-  Check,
   CloudCheck,
-  Copy,
   EnvelopeSimple,
   Globe,
   HardDrives,
@@ -16,6 +13,7 @@ import {
 } from '@phosphor-icons/react';
 import { PaginationBar } from '../../../../shared/components/pagination/PaginationBar';
 import type { DnsRecordType, DomainItem, DomainRecordItem } from '../../types/domains.types';
+import { MobileRecordCard } from './MobileRecordCard';
 import { RecordRow } from './RecordRow';
 
 interface DnsRecordsViewProps {
@@ -70,15 +68,7 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<RecordCategory>('websites');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<'current' | 'all'>('current');
-  const [copiedNs, setCopiedNs] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-
-  const handleCopyNs = () => {
-    if (!domain.nameServers?.length) return;
-    navigator.clipboard.writeText(domain.nameServers.join(', '));
-    setCopiedNs(true);
-    setTimeout(() => setCopiedNs(false), 2000);
-  };
 
   // 1. Build combined records pool across all domains for global search
   const allCombinedRecords = useMemo(() => {
@@ -181,12 +171,44 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
     return websiteRecords.filter((r) => r.proxied).length;
   }, [websiteRecords]);
 
+  const renderEmptyState = () => {
+    if (searchQuery) {
+      return (
+        <div className="flex flex-col items-center justify-center space-y-2.5 max-w-md mx-auto px-4">
+          <p className="text-xs">
+            No records matching <strong className="text-fg-primary">"{searchQuery}"</strong> in{' '}
+            {searchScope === 'current' ? domain.name : 'all domains'}.
+          </p>
+          {searchScope === 'current' && matchCountInOtherDomains > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearchScope('all')}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+            >
+              <Globe size={14} weight="duotone" />
+              <span>
+                Found {matchCountInOtherDomains} result(s) in other domains! Tap to Search All
+              </span>
+            </button>
+          )}
+        </div>
+      );
+    }
+    if (activeCategory === 'websites') {
+      return 'No website subdomains configured yet. Tap "Add" to create one.';
+    }
+    if (activeCategory === 'mail') {
+      return 'No mail routing records configured for this domain.';
+    }
+    return 'No records found.';
+  };
+
   return (
     <div className="rounded-2xl border border-default bg-surface shadow-xs overflow-hidden">
       {/* 1. Sleek One-Click Domain Switcher Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-surface border-b border-default">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-          <span className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider shrink-0 mr-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 bg-surface border-b border-default">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <span className="hidden sm:inline text-[11px] font-semibold text-fg-muted uppercase tracking-wider shrink-0 mr-1">
             Domain:
           </span>
           {allDomains.map((d) => {
@@ -198,82 +220,61 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
                 onClick={() => {
                   onSelectDomain(d);
                   setCurrentPage(1);
-                  if (searchScope === 'current') {
-                    // Stay on current scope for new domain
-                  }
                 }}
-                className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                className={`flex items-center gap-1.5 sm:gap-2 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   isSelected && searchScope === 'current'
                     ? 'bg-accent text-accent-fg shadow-xs ring-1 ring-accent-ring font-bold'
                     : 'bg-elevated/70 border border-subtle text-fg-secondary hover:text-fg-primary hover:bg-elevated'
                 }`}
               >
-                <Globe size={14} weight="duotone" className="shrink-0" />
+                <Globe size={13} weight="duotone" className="shrink-0" />
                 <span>{d.name}</span>
-                <span
-                  className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
-                    isSelected && searchScope === 'current'
-                      ? 'bg-accent-fg/20 text-accent-fg font-bold'
-                      : 'bg-surface text-fg-muted'
-                  }`}
-                >
-                  {d.recordCount > 0 ? d.recordCount : ''}
-                </span>
+                {d.recordCount > 0 && (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+                      isSelected && searchScope === 'current'
+                        ? 'bg-accent-fg/20 text-accent-fg font-bold'
+                        : 'bg-surface text-fg-muted'
+                    }`}
+                  >
+                    {d.recordCount}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
 
-        {/* Selected Domain Nameservers & Apex Link */}
-        <div className="flex items-center gap-2 text-xs font-mono text-fg-muted shrink-0 self-start sm:self-auto">
-          <span className="text-[11px] text-fg-muted hidden md:inline">NS:</span>
-          <span className="rounded bg-elevated border border-subtle px-2 py-0.5 text-[11px] text-fg-secondary select-all">
+        {/* Selected Domain Nameservers */}
+        <div className="flex items-center gap-1.5 text-xs font-mono text-fg-muted shrink-0">
+          <span className="text-[11px] text-fg-muted">NS:</span>
+          <span className="rounded bg-elevated border border-subtle px-2 py-0.5 text-[11px] text-fg-secondary truncate select-all">
             {domain.nameServers?.[0] || 'Cloudflare DNS'}
           </span>
-          <button
-            type="button"
-            onClick={handleCopyNs}
-            className="text-fg-muted hover:text-accent cursor-pointer p-1 rounded hover:bg-elevated transition-colors"
-            title="Copy all nameservers"
-          >
-            {copiedNs ? (
-              <Check size={12} weight="bold" className="text-emerald-400" />
-            ) : (
-              <Copy size={12} weight="bold" />
-            )}
-          </button>
-          <a
-            href={`https://${domain.name}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Visit site"
-            className="text-fg-muted hover:text-accent p-1 rounded hover:bg-elevated transition-colors"
-          >
-            <ArrowSquareOut size={13} weight="bold" />
-          </a>
         </div>
       </div>
 
       {/* 2. Sub-Header: Categorized Tabs, Heuristic Search Bar, Scope Switcher, and Add Record */}
-      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5 px-4 py-2.5 bg-elevated/25 border-b border-default">
-        {/* Left: Category Navigation Pills */}
-        <div className="flex items-center gap-1.5 p-0.5 rounded-lg bg-surface border border-subtle shrink-0">
+      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-2.5 px-3 sm:px-4 py-2.5 bg-elevated/25 border-b border-default">
+        {/* Left: Category Navigation Pills (3-column equal grid on mobile, inline flex on desktop) */}
+        <div className="grid grid-cols-3 sm:flex items-center gap-1 sm:gap-1.5 p-0.5 rounded-lg bg-surface border border-subtle w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={() => {
               setActiveCategory('websites');
               setCurrentPage(1);
             }}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-md px-2 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer min-w-0 ${
               activeCategory === 'websites'
                 ? 'bg-accent text-accent-fg shadow-2xs font-bold'
                 : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
             }`}
           >
-            <Globe size={14} weight="duotone" />
-            <span>Websites & Subdomains</span>
+            <Globe size={13} weight="duotone" className="shrink-0" />
+            <span className="sm:hidden truncate">Websites</span>
+            <span className="hidden sm:inline">Websites & Subdomains</span>
             <span
-              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono shrink-0 ${
                 activeCategory === 'websites'
                   ? 'bg-accent-fg/20 text-accent-fg'
                   : 'bg-elevated text-fg-muted'
@@ -289,16 +290,17 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
               setActiveCategory('mail');
               setCurrentPage(1);
             }}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-md px-2 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer min-w-0 ${
               activeCategory === 'mail'
                 ? 'bg-accent text-accent-fg shadow-2xs font-bold'
                 : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
             }`}
           >
-            <EnvelopeSimple size={14} weight="duotone" />
-            <span>Mail & Email Routing</span>
+            <EnvelopeSimple size={13} weight="duotone" className="shrink-0" />
+            <span className="sm:hidden truncate">Mail</span>
+            <span className="hidden sm:inline">Mail & Email Routing</span>
             <span
-              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono shrink-0 ${
                 activeCategory === 'mail'
                   ? 'bg-accent-fg/20 text-accent-fg'
                   : 'bg-elevated text-fg-muted'
@@ -314,16 +316,17 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
               setActiveCategory('all');
               setCurrentPage(1);
             }}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 sm:gap-2 rounded-md px-2 sm:px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer min-w-0 ${
               activeCategory === 'all'
                 ? 'bg-accent text-accent-fg shadow-2xs font-bold'
                 : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
             }`}
           >
-            <SquaresFour size={14} weight="duotone" />
-            <span>All Records</span>
+            <SquaresFour size={13} weight="duotone" className="shrink-0" />
+            <span className="sm:hidden truncate">All</span>
+            <span className="hidden sm:inline">All Records</span>
             <span
-              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
+              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono shrink-0 ${
                 activeCategory === 'all'
                   ? 'bg-accent-fg/20 text-accent-fg'
                   : 'bg-elevated text-fg-muted'
@@ -335,9 +338,9 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
         </div>
 
         {/* Right: Heuristic Search & Scope Switcher & Add Record */}
-        <div className="flex items-center gap-2 flex-1 xl:max-w-xl xl:justify-end flex-wrap sm:flex-nowrap">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 xl:max-w-xl xl:justify-end">
           {/* Heuristic Search Input */}
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
             <MagnifyingGlass
               size={14}
               weight="bold"
@@ -368,66 +371,92 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
             )}
           </div>
 
-          {/* Scope Selector: Active Domain vs All Domains */}
-          <div
-            className="flex items-center p-0.5 rounded-lg bg-surface border border-subtle shrink-0"
-            title="Switch search scope between current domain or all domains"
-          >
+          <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto shrink-0">
+            {/* Scope Selector: Active Domain vs All Domains */}
+            <div
+              className="grid grid-cols-2 sm:flex items-center p-0.5 rounded-lg bg-surface border border-subtle flex-1 sm:flex-initial min-w-0"
+              title="Switch search scope between current domain or all domains"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('current');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer truncate ${
+                  searchScope === 'current'
+                    ? 'bg-accent text-accent-fg shadow-2xs'
+                    : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                }`}
+              >
+                <span className="truncate">{domain.name}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchScope('all');
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1 min-w-0 ${
+                  searchScope === 'all'
+                    ? 'bg-accent text-accent-fg shadow-2xs'
+                    : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                }`}
+              >
+                <Globe size={11} weight="duotone" className="shrink-0" />
+                <span className="truncate">All Domains</span>
+                {matchCountInOtherDomains > 0 && searchScope === 'current' && (
+                  <span className="rounded-full bg-accent px-1 text-[9px] font-bold text-accent-fg shrink-0">
+                    +{matchCountInOtherDomains}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Add Record button */}
             <button
               type="button"
-              onClick={() => {
-                setSearchScope('current');
-                setCurrentPage(1);
-              }}
-              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer ${
-                searchScope === 'current'
-                  ? 'bg-accent text-accent-fg shadow-2xs'
-                  : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
-              }`}
+              onClick={() =>
+                onOpenCreateRecord(
+                  undefined,
+                  activeCategory === 'mail' ? 'MX' : 'A'
+                )
+              }
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer shadow-xs shrink-0"
             >
-              <span>{domain.name}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchScope('all');
-                setCurrentPage(1);
-              }}
-              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                searchScope === 'all'
-                  ? 'bg-accent text-accent-fg shadow-2xs'
-                  : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
-              }`}
-            >
-              <Globe size={11} weight="duotone" />
-              <span>All Domains</span>
-              {matchCountInOtherDomains > 0 && searchScope === 'current' && (
-                <span className="rounded-full bg-accent px-1 text-[9px] font-bold text-accent-fg">
-                  +{matchCountInOtherDomains}
-                </span>
-              )}
+              <Plus size={14} weight="bold" />
+              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">Add Record</span>
             </button>
           </div>
-
-          {/* Add Record button */}
-          <button
-            type="button"
-            onClick={() =>
-              onOpenCreateRecord(
-                undefined,
-                activeCategory === 'mail' ? 'MX' : 'A'
-              )
-            }
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer shadow-xs shrink-0"
-          >
-            <Plus size={14} weight="bold" />
-            <span className="hidden sm:inline">Add Record</span>
-          </button>
         </div>
       </div>
 
-      {/* 3. Categorized Records Table */}
-      <div className="overflow-x-auto">
+      {/* 3A. MOBILE DEDICATED RECORDS CARD LIST (< md) */}
+      <div className="md:hidden divide-y divide-subtle">
+        {isLoading && records.length === 0 ? (
+          <div className="py-12 text-center text-xs text-fg-muted">
+            Loading records from Cloudflare...
+          </div>
+        ) : paginatedRecords.length > 0 ? (
+          paginatedRecords.map((record) => (
+            <MobileRecordCard
+              key={record.id || `${record.domainName}-${record.name}-${record.type}`}
+              record={record}
+              showDomainBadge={searchScope === 'all'}
+              onEdit={onEditRecord}
+              onDelete={onDeleteRecord}
+            />
+          ))
+        ) : (
+          <div className="py-10 text-center text-xs text-fg-muted">
+            {renderEmptyState()}
+          </div>
+        )}
+      </div>
+
+      {/* 3B. DESKTOP CATEGORIZED RECORDS TABLE (md: and above) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="border-b border-default bg-elevated/50 text-[11px] font-semibold text-fg-muted uppercase tracking-wider">
@@ -463,32 +492,7 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
             ) : (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-fg-muted">
-                  {searchQuery ? (
-                    <div className="flex flex-col items-center justify-center space-y-2.5 max-w-md mx-auto">
-                      <p className="text-xs">
-                        No records matching <strong className="text-fg-primary">"{searchQuery}"</strong> in{' '}
-                        {searchScope === 'current' ? domain.name : 'all domains'}.
-                      </p>
-                      {searchScope === 'current' && matchCountInOtherDomains > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setSearchScope('all')}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
-                        >
-                          <Globe size={14} weight="duotone" />
-                          <span>
-                            Found {matchCountInOtherDomains} result(s) in other domains! Click to Search All Domains
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  ) : activeCategory === 'websites' ? (
-                    'No website subdomains configured yet. Click "Add Record" to create one.'
-                  ) : activeCategory === 'mail' ? (
-                    'No mail routing records configured for this domain.'
-                  ) : (
-                    'No records found.'
-                  )}
+                  {renderEmptyState()}
                 </td>
               </tr>
             )}
@@ -509,8 +513,28 @@ export const DnsRecordsView: React.FC<DnsRecordsViewProps> = ({
         </div>
       )}
 
-      {/* 5. Summary Telemetry Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-default bg-elevated/25 text-[11px] text-fg-muted">
+      {/* 5A. MOBILE COMPACT TELEMETRY FOOTER (< sm) */}
+      <div className="sm:hidden grid grid-cols-2 gap-1.5 px-3 py-2.5 border-t border-default bg-elevated/25 text-[11px] text-fg-secondary">
+        <div className="flex items-center gap-1.5 rounded-lg bg-surface/70 border border-subtle px-2 py-1 min-w-0">
+          <TreeStructure size={12} weight="duotone" className="text-blue-400 shrink-0" />
+          <span className="truncate font-medium">{subdomainsCount} Subdomains</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg bg-surface/70 border border-subtle px-2 py-1 min-w-0">
+          <CloudCheck size={12} weight="fill" className="text-amber-400 shrink-0" />
+          <span className="truncate font-medium">{proxiedCount} CDN Proxied</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg bg-surface/70 border border-subtle px-2 py-1 min-w-0">
+          <HardDrives size={12} weight="duotone" className="text-purple-400 shrink-0" />
+          <span className="truncate font-medium">{targetPool.length} Total Records</span>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg bg-surface/70 border border-subtle px-2 py-1 min-w-0 text-fg-muted">
+          <ShieldCheck size={12} weight="duotone" className="text-emerald-400 shrink-0" />
+          <span className="truncate font-medium">Edge Active</span>
+        </div>
+      </div>
+
+      {/* 5B. DESKTOP SUMMARY TELEMETRY BAR (sm: and above) */}
+      <div className="hidden sm:flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-default bg-elevated/25 text-[11px] text-fg-muted">
         <div className="flex items-center gap-3 flex-wrap">
           <span className="inline-flex items-center gap-1.5 text-fg-secondary">
             <TreeStructure size={13} weight="duotone" className="text-blue-400" />

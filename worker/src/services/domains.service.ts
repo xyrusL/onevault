@@ -392,25 +392,32 @@ export const domainsService = {
     return { ok: true };
   },
 
+  /** Resolves Cloudflare zoneId for a domain name */
+  async resolveZoneId(env: Env, domainName: string): Promise<string | null> {
+    const zones = await this.listZones(env);
+    const cfZone = zones.find((z) => z.name === domainName);
+    if (cfZone) {
+      return cfZone.id;
+    }
+    try {
+      const row = await env.DB.prepare(
+        'SELECT zone_id FROM custom_domains WHERE name = ?'
+      )
+        .bind(domainName)
+        .first<{ zone_id: string | null }>();
+      return row?.zone_id || null;
+    } catch {
+      return null;
+    }
+  },
+
   /** Lists all DNS records & subdomains for a domain */
   async listRecords(env: Env, domainNameInput: string): Promise<DomainRecordDto[]> {
     await this.ensureTables(env);
     const domainName = cleanDomainName(domainNameInput);
 
     // Find zoneId if any
-    let zoneId: string | null = null;
-    const zones = await this.listZones(env);
-    const cfZone = zones.find((z) => z.name === domainName);
-    if (cfZone) {
-      zoneId = cfZone.id;
-    } else {
-      const row = await env.DB.prepare(
-        'SELECT zone_id FROM custom_domains WHERE name = ?'
-      )
-        .bind(domainName)
-        .first<{ zone_id: string | null }>();
-      zoneId = row?.zone_id || null;
-    }
+    const zoneId = await this.resolveZoneId(env, domainName);
 
     // 1. Try to fetch from Cloudflare if zoneId is available
     if (zoneId) {
@@ -436,7 +443,6 @@ export const domainsService = {
               r.locked ||
               r.meta?.auto_added ||
               r.meta?.managed_by_apps ||
-              r.meta?.managed_by_argo_tunnel ||
               (r.type === 'MX' && lowerContent.includes('.mx.cloudflare.net')) ||
               (r.type === 'TXT' && lowerContent.includes('spf.mx.cloudflare.net')) ||
               lowerContent.includes('cf-email-verification') ||
@@ -582,34 +588,28 @@ export const domainsService = {
     const comment = input.comment?.trim() || null;
 
     // Look up zoneId
-    const zones = await this.listZones(env);
-    const zone = zones.find((z) => z.name === domainName);
-    const zoneId = zone?.id || null;
+    const zoneId = await this.resolveZoneId(env, domainName);
 
     let cfRecordId: string | null = null;
     if (zoneId) {
-      try {
-        const cfRecord = await cfFetch<CfDnsRecord>(
-          env,
-          `/zones/${zoneId}/dns_records`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              type: recordType,
-              name: fullName,
-              content,
-              priority: recordType === 'MX' ? (input.priority ?? 10) : undefined,
-              ttl: proxied ? 1 : ttl,
-              proxied: ['A', 'AAAA', 'CNAME'].includes(recordType) ? proxied : false,
-              comment: comment || undefined,
-            }),
-          }
-        );
-        if (cfRecord?.id) {
-          cfRecordId = cfRecord.id;
+      const cfRecord = await cfFetch<CfDnsRecord>(
+        env,
+        `/zones/${zoneId}/dns_records`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            type: recordType,
+            name: fullName,
+            content,
+            priority: ['MX', 'SRV', 'URI'].includes(recordType) ? (input.priority ?? 10) : undefined,
+            ttl: proxied ? 1 : ttl,
+            proxied: ['A', 'AAAA', 'CNAME'].includes(recordType) ? proxied : false,
+            comment: comment || undefined,
+          }),
         }
-      } catch {
-        // Fallback to storing locally in D1
+      );
+      if (cfRecord?.id) {
+        cfRecordId = cfRecord.id;
       }
     }
 
@@ -635,7 +635,8 @@ export const domainsService = {
         now,
         now
       )
-      .run();
+      .run()
+      .catch(() => undefined);
 
     return {
       id: newId,
@@ -665,9 +666,9 @@ export const domainsService = {
     const domainName = cleanDomainName(domainNameInput);
 
     const existing = await env.DB.prepare(
-      'SELECT * FROM domain_dns_records WHERE id = ? AND domain_name = ?'
+      'SELECT * FROM domain_dns_records WHERE (id = ? OR cf_record_id = ?) AND domain_name = ?'
     )
-      .bind(recordId, domainName)
+      .bind(recordId, recordId, domainName)
       .first<DomainDnsRecordRow>();
 
     const recordType = (input.type || existing?.type || 'A').toUpperCase() as DnsRecordType;
@@ -682,9 +683,9 @@ export const domainsService = {
     const comment = input.comment !== undefined ? (input.comment?.trim() || null) : (existing?.comment ?? null);
     const now = new Date().toISOString();
 
-    // Try Cloudflare update if CF record ID exists
-    const zoneId = existing?.zone_id || null;
-    const cfRecordId = existing?.cf_record_id || null;
+    // Resolve Cloudflare zoneId and cfRecordId even if record was fetched directly from Cloudflare
+    const zoneId = existing?.zone_id || (await this.resolveZoneId(env, domainName));
+    const cfRecordId = existing?.cf_record_id || recordId;
     if (zoneId && cfRecordId) {
       await cfFetch(env, `/zones/${zoneId}/dns_records/${cfRecordId}`, {
         method: 'PATCH',
@@ -701,13 +702,13 @@ export const domainsService = {
           proxied: ['A', 'AAAA', 'CNAME'].includes(recordType) ? proxied : false,
           comment: comment || undefined,
         }),
-      }).catch(() => undefined);
+      });
     }
 
     await env.DB.prepare(
       `UPDATE domain_dns_records
        SET subdomain = ?, name = ?, type = ?, content = ?, ttl = ?, proxied = ?, comment = ?, updated_at = ?
-       WHERE id = ?`
+       WHERE id = ? OR cf_record_id = ?`
     )
       .bind(
         subdomain,
@@ -718,9 +719,11 @@ export const domainsService = {
         proxied ? 1 : 0,
         comment,
         now,
-        recordId
+        recordId,
+        cfRecordId
       )
-      .run();
+      .run()
+      .catch(() => undefined);
 
     return {
       id: recordId,
@@ -749,22 +752,35 @@ export const domainsService = {
     const domainName = cleanDomainName(domainNameInput);
 
     const existing = await env.DB.prepare(
-      'SELECT zone_id, cf_record_id FROM domain_dns_records WHERE id = ? AND domain_name = ?'
+      'SELECT zone_id, cf_record_id FROM domain_dns_records WHERE (id = ? OR cf_record_id = ?) AND domain_name = ?'
     )
-      .bind(recordId, domainName)
+      .bind(recordId, recordId, domainName)
       .first<{ zone_id: string | null; cf_record_id: string | null }>();
 
-    if (existing?.zone_id && existing.cf_record_id) {
-      await cfFetch(
-        env,
-        `/zones/${existing.zone_id}/dns_records/${existing.cf_record_id}`,
-        { method: 'DELETE' }
-      ).catch(() => undefined);
+    const zoneId = existing?.zone_id || (await this.resolveZoneId(env, domainName));
+    const cfRecordId = existing?.cf_record_id || recordId;
+
+    if (zoneId && cfRecordId) {
+      try {
+        await cfFetch(
+          env,
+          `/zones/${zoneId}/dns_records/${cfRecordId}`,
+          { method: 'DELETE' }
+        );
+      } catch (err) {
+        // Ignore 404 if record was only stored locally in D1 or already removed in Cloudflare
+        if (!(err instanceof HttpError && err.status === 404)) {
+          throw err;
+        }
+      }
     }
 
-    await env.DB.prepare('DELETE FROM domain_dns_records WHERE id = ?')
-      .bind(recordId)
-      .run();
+    await env.DB.prepare(
+      'DELETE FROM domain_dns_records WHERE (id = ? OR cf_record_id = ?) AND domain_name = ?'
+    )
+      .bind(recordId, cfRecordId, domainName)
+      .run()
+      .catch(() => undefined);
 
     return { ok: true };
   },

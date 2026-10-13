@@ -179,27 +179,29 @@ export const DomainsView: React.FC = () => {
   };
 
   const handleUpdateRecord = async (recordId: string, payload: UpdateRecordPayload) => {
-    if (!selectedDomain) return;
-    const updated = await domainsService.updateRecord(selectedDomain.name, recordId, payload);
-    await loadRecords(selectedDomain);
+    const targetDomain = editingRecord?.domainName || selectedDomain?.name;
+    if (!targetDomain) return;
+    const updated = await domainsService.updateRecord(targetDomain, recordId, payload);
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
     setAllRecordsByDomain((prev) => {
-      const currentList = prev[selectedDomain.name.toLowerCase()] || [];
+      const currentList = prev[targetDomain.toLowerCase()] || [];
       return {
         ...prev,
-        [selectedDomain.name.toLowerCase()]: currentList.map((r) =>
+        [targetDomain.toLowerCase()]: currentList.map((r) =>
           r.id === recordId ? updated : r
         ),
       };
     });
+    if (selectedDomain) {
+      await loadRecords(selectedDomain);
+    }
   };
 
   const handleDeleteRecord = async (record: DomainRecordItem) => {
     const targetDomain = record.domainName || selectedDomain?.name;
     if (!targetDomain) return;
     await domainsService.deleteRecord(targetDomain, record.id);
-    if (selectedDomain) {
-      await loadRecords(selectedDomain);
-    }
+    setRecords((prev) => prev.filter((r) => r.id !== record.id));
     setAllRecordsByDomain((prev) => {
       const currentList = prev[targetDomain.toLowerCase()] || [];
       return {
@@ -207,6 +209,9 @@ export const DomainsView: React.FC = () => {
         [targetDomain.toLowerCase()]: currentList.filter((r) => r.id !== record.id),
       };
     });
+    if (selectedDomain) {
+      await loadRecords(selectedDomain);
+    }
     await loadDomains();
   };
 
