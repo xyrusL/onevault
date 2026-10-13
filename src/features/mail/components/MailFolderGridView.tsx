@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Globe, Plus } from '@phosphor-icons/react';
 import { MailAccountItem, MailDomain, MailFolderInfo } from '../types/mail.types';
 import { MailFolderCard } from './MailFolderCard';
+import { resolveSubdomainTheme } from './SubdomainIcon';
 
 interface MailFolderGridViewProps {
   accounts: MailAccountItem[];
@@ -116,18 +117,20 @@ export const MailFolderGridView: React.FC<MailFolderGridViewProps> = ({
 
   return (
     <div className="flex-1 flex flex-col gap-6">
-      {groups.map((group) => (
-        <div key={group.rootDomain} className="space-y-3">
-          {/* Domain Section Header */}
-          <div className="flex items-center justify-between gap-3 border-b border-subtle pb-2">
-            <div className="flex items-center gap-2">
-              <span className="font-display text-sm font-semibold text-fg-primary">
-                @{group.rootDomain}
-              </span>
-              <span className="text-xs text-fg-muted">
-                • {group.folders.length} {group.folders.length === 1 ? 'folder' : 'folders'} ({group.totalEmails} {group.totalEmails === 1 ? 'address' : 'addresses'})
-              </span>
-            </div>
+      {groups.map((group) => {
+        const rootTheme = resolveSubdomainTheme(group.rootDomain, true);
+        return (
+          <div key={group.rootDomain} className="space-y-3">
+            {/* Domain Section Header */}
+            <div className="flex items-center justify-between gap-3 border-b border-subtle pb-2">
+              <div className="flex items-center gap-2">
+                <span className={`font-display text-sm font-semibold ${rootTheme.domainTextClass}`}>
+                  @{group.rootDomain}
+                </span>
+                <span className="text-xs text-fg-muted">
+                  • {group.folders.length} {group.folders.length === 1 ? 'folder' : 'folders'} ({group.totalEmails} {group.totalEmails === 1 ? 'address' : 'addresses'})
+                </span>
+              </div>
 
             <button
               type="button"
@@ -169,7 +172,8 @@ export const MailFolderGridView: React.FC<MailFolderGridViewProps> = ({
             </button>
           </div>
         </div>
-      ))}
+      );
+    })}
     </div>
   );
 };

@@ -55,7 +55,17 @@ worker/
 - **`GET /api/mail`**: Lists mail accounts, forwarding destinations, and received message counts.
 - **`POST /api/mail`**: Provisions a new custom email routing address (`name@domain.com`). Creates an Email Routing rule via Cloudflare API.
 - **`GET /api/mail/messages`**: Retrieves inbound emails captured by Direct Vault Inboxes (mailboxes with forwarding set to `None`).
+- **`GET /api/mail/activity`**: Retrieves combined Cloudflare GraphQL adaptive email routing logs and D1 SQLite message telemetry.
 - **`DELETE /api/mail/:id`**: Deletes a mailbox and its corresponding Cloudflare Email Routing rule.
+
+#### Inbound Service Detection & Purpose Tag Engine
+OneVault includes a multi-signal service detection algorithm ([`mail-service-detector.utils.ts`](../src/features/mail/utils/mail-service-detector.utils.ts)):
+1. **Dynamic Generic Brand Extraction**: 100% zero-hardcoding brand derivation engine that decomposes any internet domain or sender without static lookup tables.
+2. **Subdomain & TLD Normalization**: Automatically strips routing subdomains (`mail.`, `in.`, `em.`, `mailer.`, `notifications.`, `bounces.`, `no-reply.`), secondary ccTLDs (`.co.uk`, `.com.au`), and standard TLDs (`.com`, `.io`, `.ai`, etc.) while formatting words and camelCase.
+3. **Sender Name & Pattern Cleaning**: Strips notification suffixes (`Team`, `Support`, `friend suggestions`) and parses expressions like `"on Instagram"` to extract the hosting platform.
+4. **Subject Line Extraction**: Captures bracketed brands (`[GitHub]`, `[Supabase]`) and signup phrases (`Welcome to`, `Verify your account`).
+5. **Real-Time Search Indexing**: Any email address can be searched by its generated tags (`github`, `supabase`, `dribbble`) even if the alias name or note does not mention the brand.
+6. **Distinct Routing Iconography**: Forwarded delivery badges use a non-common `FastForward` indicator (`FastForward` duotone icon) rather than generic checkmarks or verbose text.
 
 ### 3. 2FA Authenticator API (`/api/2fa`)
 - **`GET /api/2fa`**: Returns stored encrypted TOTP tokens.

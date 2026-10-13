@@ -22,9 +22,8 @@ export const MailFolderCard: React.FC<MailFolderCardProps> = ({
 
   const subtitle = folder.isRoot ? 'Root Domain' : `@${folder.fullDomain}`;
   const theme = resolveSubdomainTheme(
-    folder.subdomainPart || folder.rootDomain,
-    folder.isRoot,
-    folder.fullDomain
+    folder.fullDomain,
+    folder.isRoot
   );
 
   return (
@@ -38,33 +37,38 @@ export const MailFolderCard: React.FC<MailFolderCardProps> = ({
           onOpenFolder(folder);
         }
       }}
-      className="group relative flex flex-col justify-between rounded-xl bg-surface hover:bg-elevated/75 border border-default hover:border-strong p-3.5 sm:p-4 transition-all duration-200 cursor-pointer shadow-card select-none overflow-hidden"
+      className="group relative flex flex-col justify-between rounded-xl bg-surface-solid hover:bg-elevated/75 border border-default hover:border-strong p-3.5 sm:p-4 transition-all duration-200 cursor-pointer shadow-card select-none overflow-hidden"
     >
       <div>
         {/* Top Row: Icon + Domain/Subdomain Name + Email Count Badge */}
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5 min-w-0">
             <SubdomainIcon
-              name={folder.subdomainPart || folder.rootDomain}
+              name={folder.fullDomain}
               isRoot={folder.isRoot}
-              context={folder.fullDomain}
               size={18}
               className="h-9 w-9 shrink-0 transition-transform duration-200 group-hover:scale-105"
             />
             <div className="min-w-0">
-              <h3 className="font-display text-sm font-semibold text-fg-primary transition-colors truncate leading-tight">
-                {displayName}
+              <h3 className="font-display text-sm font-semibold truncate leading-tight">
+                {folder.isRoot ? (
+                  <span className={theme.domainTextClass}>@{folder.rootDomain}</span>
+                ) : (
+                  <span className="text-fg-primary">{displayName}</span>
+                )}
               </h3>
-              <p
-                className={`mt-0.5 font-mono text-[11px] truncate leading-tight ${theme.domainTextClass}`}
-              >
-                {subtitle}
+              <p className="mt-0.5 font-mono text-[11px] truncate leading-tight">
+                {folder.isRoot ? (
+                  <span className="text-fg-muted">Root Domain</span>
+                ) : (
+                  <span className={theme.domainTextClass}>@{folder.fullDomain}</span>
+                )}
               </p>
             </div>
           </div>
 
           <span
-            className={`text-xs px-2.5 py-0.5 shrink-0 rounded-full font-semibold border ${
+            className={`text-xs px-2.5 py-0.5 shrink-0 rounded-full font-medium border ${
               folder.totalEmails > 0
                 ? theme.badgeClass
                 : 'bg-surface border-subtle text-fg-muted'
@@ -108,13 +112,13 @@ export const MailFolderCard: React.FC<MailFolderCardProps> = ({
           )}
 
           <span
-            className={`inline-flex items-center gap-0.5 text-xs font-medium text-fg-muted group-hover:${theme.textClass} transition-colors`}
+            className="inline-flex items-center gap-0.5 text-xs font-medium text-fg-muted group-hover:text-fg-primary transition-colors"
           >
             <span>View</span>
             <CaretRight
               size={12}
               weight="bold"
-              className={`transition-transform duration-200 group-hover:translate-x-0.5 ${theme.textClass}`}
+              className="transition-transform duration-200 group-hover:translate-x-0.5 text-fg-muted group-hover:text-fg-primary"
             />
           </span>
         </div>

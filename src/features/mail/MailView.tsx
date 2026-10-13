@@ -4,6 +4,7 @@ import {
   FileText,
   FolderPlus,
   Plus,
+  Pulse,
   Trash,
   Tray,
   WarningCircle,
@@ -21,9 +22,14 @@ import { MailFolderGridView } from './components/MailFolderGridView';
 import { MailHeader } from './components/MailHeader';
 import { MailInboxModalContent } from './components/MailInboxModalContent';
 import { MailNotePadModalContent } from './components/MailNotePadModalContent';
+import { MailAccountActivityModalContent } from './components/service-activity';
 import { mailInboxService } from './services/mail-inbox.service';
 import { mailService } from './services/mail.service';
 import { MailActivityItem } from './types/mail-inbox.types';
+import {
+  accountMatchesSearch,
+  buildServiceDetectionMap,
+} from './utils/mail-service-detector.utils';
 import {
   CreateMailPayload,
   CreateSubdomainPayload,
@@ -68,6 +74,8 @@ export const MailView: React.FC = () => {
 
   const [selectedAccount, setSelectedAccount] = useState<MailAccountItem | null>(null);
   const [notePadAccount, setNotePadAccount] = useState<MailAccountItem | null>(null);
+  const [activityModalAccount, setActivityModalAccount] =
+    useState<MailAccountItem | null>(null);
   const [inboxAccount, setInboxAccount] = useState<MailAccountItem | null>(null);
   const [initialInboxMessageId, setInitialInboxMessageId] = useState<string | null>(null);
   const [pendingDeleteAccount, setPendingDeleteAccount] =
@@ -75,17 +83,19 @@ export const MailView: React.FC = () => {
   const [pendingDeleteFolder, setPendingDeleteFolder] =
     useState<MailFolderInfo | null>(null);
 
-  // Global search filtering for accounts
+  // Compute smart service detection map across all accounts & activity items
+  const detectionMap = useMemo(() => {
+    return buildServiceDetectionMap(accounts, activityItems);
+  }, [accounts, activityItems]);
+
+  // Global search filtering for accounts (searches email, forward, note, AND generated tags!)
   const filteredAccounts = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (!q) return accounts;
-    return accounts.filter(
-      (item) =>
-        item.email.toLowerCase().includes(q) ||
-        item.forwardTo.toLowerCase().includes(q) ||
-        item.note.toLowerCase().includes(q)
+    return accounts.filter((item) =>
+      accountMatchesSearch(item, detectionMap.byAccountId.get(item.id), q)
     );
-  }, [accounts, searchQuery]);
+  }, [accounts, searchQuery, detectionMap]);
 
   // Global search filtering for activity items
   const filteredActivity = useMemo(() => {
@@ -221,6 +231,10 @@ export const MailView: React.FC = () => {
 
   const handleOpenNote = (account: MailAccountItem) => {
     setNotePadAccount(account);
+  };
+
+  const handleOpenActivity = (account: MailAccountItem) => {
+    setActivityModalAccount(account);
   };
 
   const handleRequestDelete = (account: MailAccountItem) => {
@@ -401,6 +415,7 @@ export const MailView: React.FC = () => {
           {/* Table filtered to this active folder */}
           <MailAccountList
             accounts={currentFolderAccounts}
+            detectedSummaries={detectionMap.byAccountId}
             isLoading={isLoading}
             searchQuery={searchQuery}
             emptyMessage={`No email addresses created yet in @${activeFolder.fullDomain}. Click "New Email in ${activeFolder.subdomainPart || activeFolder.rootDomain}" to create one.`}
@@ -409,6 +424,7 @@ export const MailView: React.FC = () => {
               setInitialInboxMessageId(null);
               setInboxAccount(item);
             }}
+            onOpenActivity={handleOpenActivity}
             onOpenNote={handleOpenNote}
           />
         </div>
@@ -435,6 +451,7 @@ export const MailView: React.FC = () => {
         /* Preserved 1:1 Current Design: Table of All Addresses */
         <MailAccountList
           accounts={filteredAccounts}
+          detectedSummaries={detectionMap.byAccountId}
           isLoading={isLoading}
           searchQuery={searchQuery}
           onSelectAccount={(item) => setSelectedAccount(item)}
@@ -442,6 +459,7 @@ export const MailView: React.FC = () => {
             setInitialInboxMessageId(null);
             setInboxAccount(item);
           }}
+          onOpenActivity={handleOpenActivity}
           onOpenNote={handleOpenNote}
         />
       )}
@@ -453,7 +471,7 @@ export const MailView: React.FC = () => {
           setIsCreateModalOpen(false);
           setCreateMailInitialDomain(undefined);
         }}
-        title="Create New Email"
+        title="Create Email"
         subtitle={
           createMailInitialDomain
             ? `Creating mailbox in @${createMailInitialDomain}`
@@ -504,10 +522,34 @@ export const MailView: React.FC = () => {
         {selectedAccount && (
           <MailDetailsModalContent
             account={selectedAccount}
+            summary={detectionMap.byAccountId.get(selectedAccount.id)}
             forwardTargets={forwardTargets}
             onClose={() => setSelectedAccount(null)}
             onUpdate={handleUpdateMail}
             onRequestDelete={handleRequestDelete}
+            onOpenActivity={handleOpenActivity}
+          />
+        )}
+      </BaseModal>
+
+      {/* Shared Reusable Modal: Dedicated Email Activity & Generated Tags */}
+      <BaseModal
+        isOpen={Boolean(activityModalAccount)}
+        onClose={() => setActivityModalAccount(null)}
+        title="Email Activity"
+        subtitle={activityModalAccount?.email}
+        icon={<Pulse size={15} weight="bold" className="text-sky-400" />}
+        maxWidthClass="max-w-2xl"
+      >
+        {activityModalAccount && (
+          <MailAccountActivityModalContent
+            account={activityModalAccount}
+            summary={detectionMap.byAccountId.get(activityModalAccount.id)}
+            onClose={() => setActivityModalAccount(null)}
+            onOpenNote={handleOpenNote}
+            onSelectActivity={handleSelectActivity}
+            onRefresh={() => void refreshActivity(true)}
+            isRefreshing={isActivityRefreshing}
           />
         )}
       </BaseModal>

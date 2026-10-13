@@ -7,11 +7,14 @@ import {
   Clock,
   CornersOut,
   FileText,
+  Pulse,
+  Tag,
   Trash,
   WarningCircle,
 } from '@phosphor-icons/react';
 import { BaseModal } from '../../../shared/components/modals';
 import { CustomSelect, SelectOption } from '../../../shared/components/forms';
+import { AccountServiceDetectionSummary } from '../types/mail-service-detector.types';
 import {
   ForwardTarget,
   isVaultDestination,
@@ -19,21 +22,27 @@ import {
   NO_FORWARD,
   UpdateMailPayload,
 } from '../types/mail.types';
+import { MailServiceTagBadge } from './service-activity';
+import { resolveSubdomainTheme } from './SubdomainIcon';
 
 interface MailDetailsModalContentProps {
   account: MailAccountItem;
+  summary?: AccountServiceDetectionSummary;
   forwardTargets: ForwardTarget[];
   onClose: () => void;
   onUpdate: (accountId: string, payload: UpdateMailPayload) => Promise<void>;
   onRequestDelete: (account: MailAccountItem) => void;
+  onOpenActivity?: (account: MailAccountItem) => void;
 }
 
 export const MailDetailsModalContent: React.FC<MailDetailsModalContentProps> = ({
   account,
+  summary,
   forwardTargets,
   onClose,
   onUpdate,
   onRequestDelete,
+  onOpenActivity,
 }) => {
   const [selectedForward, setSelectedForward] = useState(
     isVaultDestination(account.forwardTo) ? NO_FORWARD : account.forwardTo
@@ -99,8 +108,11 @@ export const MailDetailsModalContent: React.FC<MailDetailsModalContentProps> = (
       <div className="rounded-lg bg-elevated border border-default p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs text-fg-muted leading-none">Email Address</span>
-          <span className="font-mono text-xs font-semibold text-fg-primary leading-none">
-            {account.email}
+          <span className="font-mono text-xs leading-none">
+            <strong className="font-semibold text-fg-primary">{account.localPart}</strong>
+            <span className={`font-normal ${resolveSubdomainTheme(account.domain).domainTextClass}`}>
+              @{account.domain}
+            </span>
           </span>
         </div>
       </div>
@@ -127,6 +139,39 @@ export const MailDetailsModalContent: React.FC<MailDetailsModalContentProps> = (
           </p>
         </div>
       </div>
+
+      {/* Generated Tags */}
+      {summary && summary.tags.length > 0 && (
+        <div className="rounded-lg bg-elevated/60 border border-default p-2.5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-fg-muted leading-none">
+            <div className="flex items-center gap-1.5 font-medium">
+              <Tag size={13} weight="bold" className="text-sky-400" />
+              <span>Generated Tags</span>
+            </div>
+            {onOpenActivity && (
+              <button
+                type="button"
+                onClick={() => onOpenActivity(account)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+              >
+                <Pulse size={11} weight="bold" />
+                <span>View Activity ({summary.activityItems.length})</span>
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            {summary.tags.map((tag) => (
+              <MailServiceTagBadge
+                key={tag.id}
+                tag={tag}
+                size="sm"
+                showCount
+                onClick={onOpenActivity ? () => onOpenActivity(account) : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Editable Forwarding Destination */}
       <div className="space-y-1.5 pt-0.5">

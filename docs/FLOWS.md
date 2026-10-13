@@ -221,4 +221,36 @@ flowchart LR
     end
 ```
 
+---
+
+## 8. Smart Inbound Email Service Detection & Purpose Tagging Pipeline
+How OneVault automatically extracts service identities and platforms from incoming email activity, generates searchable purpose tags, renders per-email activity feeds, and signals forwarded routing with distinct iconography.
+
+```mermaid
+flowchart TD
+    Inbound["Inbound Email Received via Cloudflare Email Routing"] --> Log["Activity Event Logged in D1 / GraphQL Feed"]
+    Log --> Detector["Smart Service Detection Engine (mail-service-detector.utils.ts)"]
+
+    %% Multi-Signal Dynamic Analysis
+    Detector --> Signal1["Signal 1: Generic Domain Extraction (Strips transactional prefixes mail.*, no-reply.*, and multi-part TLDs)"]
+    Detector --> Signal2["Signal 2: Dynamic CamelCase & Word Decomposition (e.g. facebookmail -> Facebook, in.dribbble.com -> Dribbble)"]
+    Detector --> Signal3["Signal 3: Sender Display Name Cleaning (Strips 'Team', 'Notifications', extracts 'on [Brand]')"]
+    Detector --> Signal4["Signal 4: Subject Bracket & Welcome Patterns ('[Brand] Verify', 'Welcome to [Brand]')"]
+    Detector --> Signal5["Signal 5: Account Note Heuristic (Inferred keyword fallback from user note)"]
+
+    %% Tag Synthesis
+    Signal1 & Signal2 & Signal3 & Signal4 & Signal5 --> Synthesize["Synthesize DetectedServiceTag (Name, Category, Confidence, Color)"]
+    Synthesize --> SummaryMap["Build AccountServiceDetectionSummary (byAccountId & byEmail)"]
+
+    %% UI & Search Propagation
+    SummaryMap --> SearchIndex["Search Integration: accountMatchesSearch() (Typing 'github' finds alias immediately)"]
+    SummaryMap --> TableRow["MailAccountRow: Displays Service Badges + Activity Pulse Action Icon"]
+    SummaryMap --> ActivityModal["User Clicks Activity Icon -> Opens MailAccountActivityModalContent"]
+    
+    %% Inside Modal
+    ActivityModal --> PurposeTags["Interactive Tag Filter Chips (All, GitHub, Supabase, Dribbble)"]
+    ActivityModal --> FilteredFeed["Per-Email Inbound Activity Stream with FastForward Routing Badges"]
+```
+
+
 

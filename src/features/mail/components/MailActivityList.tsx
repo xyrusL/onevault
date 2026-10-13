@@ -2,16 +2,19 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   ArrowsClockwise,
-  Check,
   Checks,
   EnvelopeOpen,
   EnvelopeSimple,
+  FastForward,
   PaperPlaneTilt,
   Tray,
 } from '@phosphor-icons/react';
 import { PaginationBar } from '../../../shared/components/pagination';
 import { MailActivityItem } from '../types/mail-inbox.types';
 import { isVaultDestination } from '../types/mail.types';
+import { detectServiceFromActivity } from '../utils/mail-service-detector.utils';
+import { MailServiceTagBadge } from './service-activity';
+import { resolveSubdomainTheme } from './SubdomainIcon';
 
 const DESKTOP_PAGE_SIZE = 9;
 
@@ -74,7 +77,7 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col justify-between rounded-xl bg-surface backdrop-blur-xl border border-default shadow-card overflow-hidden">
+    <div className="flex-1 flex flex-col justify-between rounded-xl bg-surface-solid border border-default shadow-card overflow-hidden">
       <div>
         {/* Toolbar / Table Header */}
         <div className="flex items-center justify-between gap-3 border-b border-default bg-elevated/60 px-4 py-2.5">
@@ -136,6 +139,7 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
             {visibleItems.map((item, index) => {
               const isNoneTarget = isVaultDestination(item.forwardTo);
               const isUnread = !item.isRead;
+              const detectedTag = detectServiceFromActivity(item);
 
               return (
                 <div
@@ -152,7 +156,7 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                   title={
                     isNoneTarget
                       ? 'Click to open Inbox and read email'
-                      : 'Click to mark forwarded activity as read'
+                      : `Forwarded to ${item.forwardTo} · Click to mark as read`
                   }
                   className={`group transition-all duration-150 cursor-pointer ${
                     isUnread
@@ -186,9 +190,9 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
 
                     {/* Right: Structured Content */}
                     <div className="min-w-0 flex-1 space-y-1">
-                      {/* Line 1: Sender Name & Timestamp */}
+                      {/* Line 1: Sender Name & Timestamp + Detected Tag */}
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0 truncate">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                           {isUnread && (
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
                           )}
@@ -201,6 +205,9 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                           >
                             {item.senderName || item.sender}
                           </span>
+                          {detectedTag && (
+                            <MailServiceTagBadge tag={detectedTag} size="sm" />
+                          )}
                         </div>
                         <span className="text-[10px] font-mono text-fg-muted shrink-0">
                           {item.receivedDate} · {item.receivedTime}
@@ -220,9 +227,25 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                       <div className="flex items-center justify-between gap-2 pt-0.5">
                         {/* Clean routing pill */}
                         <div className="min-w-0 flex items-center gap-1 text-[10px] font-mono text-fg-muted truncate">
-                          <span className="truncate max-w-[110px] text-fg-secondary font-medium">
-                            {item.recipientEmail}
-                          </span>
+                          {(() => {
+                            const atIdx = item.recipientEmail.indexOf('@');
+                            if (atIdx === -1) {
+                              return (
+                                <span className="truncate max-w-[110px] text-fg-secondary font-medium">
+                                  {item.recipientEmail}
+                                </span>
+                              );
+                            }
+                            const localPart = item.recipientEmail.slice(0, atIdx);
+                            const domainPart = item.recipientEmail.slice(atIdx + 1);
+                            const rTheme = resolveSubdomainTheme(domainPart);
+                            return (
+                              <span className="truncate max-w-[110px]">
+                                <span className="text-fg-secondary font-medium">{localPart}</span>
+                                <span className={`font-normal ${rTheme.domainTextClass}`}>@{domainPart}</span>
+                              </span>
+                            );
+                          })()}
                           <ArrowRight size={9} className="shrink-0 text-fg-muted" />
                           {isNoneTarget ? (
                             <span className="inline-flex items-center gap-1 rounded bg-elevated px-1.5 py-0.5 text-[10px] font-medium text-fg-secondary shrink-0">
@@ -251,9 +274,13 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                               <span>Inbox</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/35 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400">
-                              <Check size={10} weight="bold" />
-                              <span>Forwarded</span>
+                            /* Fixed: Distinct icon without the word "Forwarded" */
+                            <span
+                              title={`Forwarded to ${item.forwardTo}`}
+                              aria-label={`Forwarded to ${item.forwardTo}`}
+                              className="inline-flex items-center justify-center h-5 w-5 rounded bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 shrink-0"
+                            >
+                              <FastForward size={11} weight="duotone" />
                             </span>
                           )}
                         </div>
@@ -287,7 +314,7 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                           {isUnread && (
                             <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400" />
                           )}
@@ -303,6 +330,9 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                           <span className="truncate text-[11px] font-mono text-fg-muted">
                             &lt;{item.sender}&gt;
                           </span>
+                          {detectedTag && (
+                            <MailServiceTagBadge tag={detectedTag} size="sm" />
+                          )}
                         </div>
 
                         <p
@@ -319,9 +349,25 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
 
                     {/* Column 2: Routing (Alias -> Destination / None) */}
                     <div className="col-span-4 flex items-center gap-1.5 min-w-0">
-                      <span className="truncate font-mono text-[11px] font-medium text-fg-primary max-w-[160px]">
-                        {item.recipientEmail}
-                      </span>
+                      {(() => {
+                        const atIdx = item.recipientEmail.indexOf('@');
+                        if (atIdx === -1) {
+                          return (
+                            <span className="truncate font-mono text-[11px] font-medium text-fg-primary max-w-[160px]">
+                              {item.recipientEmail}
+                            </span>
+                          );
+                        }
+                        const localPart = item.recipientEmail.slice(0, atIdx);
+                        const domainPart = item.recipientEmail.slice(atIdx + 1);
+                        const rTheme = resolveSubdomainTheme(domainPart);
+                        return (
+                          <span className="truncate font-mono text-[11px] max-w-[160px]">
+                            <span className="font-medium text-fg-primary">{localPart}</span>
+                            <span className={`font-normal ${rTheme.domainTextClass}`}>@{domainPart}</span>
+                          </span>
+                        );
+                      })()}
                       <ArrowRight
                         size={11}
                         weight="bold"
@@ -367,9 +413,13 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                           <span>Inbox</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-500/15 border border-emerald-500/35 px-2.5 py-1 text-[11px] font-medium text-emerald-400 shrink-0">
-                          <Check size={11} weight="bold" />
-                          <span>Forwarded</span>
+                        /* Fixed: Distinct icon without the word "Forwarded" */
+                        <span
+                          title={`Forwarded to ${item.forwardTo}`}
+                          aria-label={`Forwarded to ${item.forwardTo}`}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)] shrink-0 transition-transform duration-150 group-hover:scale-105"
+                        >
+                          <FastForward size={13} weight="duotone" />
                         </span>
                       )}
                     </div>

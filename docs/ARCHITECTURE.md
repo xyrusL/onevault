@@ -66,6 +66,21 @@ src/
     │   ├── types/                        # dashboard.types.ts
     │   └── DashboardView.tsx
     ├── mail/                             # Primary Cloudflare Mail & Inbound Routing module
+    │   ├── components/
+    │   │   ├── service-activity/         # SUB-FOLDER: Dedicated Email Activity & Generated Service Tags
+    │   │   │   ├── MailAccountActivityModalContent.tsx
+    │   │   │   ├── MailServiceTagBadge.tsx
+    │   │   │   └── index.ts
+    │   │   ├── MailAccountList.tsx
+    │   │   ├── MailAccountRow.tsx
+    │   │   ├── MailActivityList.tsx
+    │   │   ├── MailDetailsModalContent.tsx
+    │   │   ├── MailFolderGridView.tsx
+    │   │   └── MailHeader.tsx
+    │   ├── services/                     # mail.service.ts, mail-inbox.service.ts
+    │   ├── types/                        # mail.types.ts, mail-service-detector.types.ts, mail-inbox.types.ts
+    │   ├── utils/                        # mail-service-detector.utils.ts (Domain & Inbound Service Detection Engine)
+    │   └── MailView.tsx
     ├── tmail/                            # Temporary Mail (Tmail) module
     ├── two-factor/                       # 2FA Authenticator & TOTP token module
     ├── notes/                            # Zero-Knowledge Encrypted Notes & Full Canvas module

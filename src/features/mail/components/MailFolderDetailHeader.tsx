@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowLeft, Plus, Trash } from '@phosphor-icons/react';
 import { MailFolderInfo } from '../types/mail.types';
-import { SubdomainIcon } from './SubdomainIcon';
+import { resolveSubdomainTheme, SubdomainIcon } from './SubdomainIcon';
 
 interface MailFolderDetailHeaderProps {
   folder: MailFolderInfo;
@@ -19,6 +19,7 @@ export const MailFolderDetailHeader: React.FC<MailFolderDetailHeaderProps> = ({
   const title = folder.isRoot
     ? `@${folder.rootDomain}`
     : `@${folder.fullDomain}`;
+  const theme = resolveSubdomainTheme(folder.fullDomain, folder.isRoot);
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-surface border border-default rounded-xl p-3.5 shadow-card">
@@ -33,7 +34,7 @@ export const MailFolderDetailHeader: React.FC<MailFolderDetailHeaderProps> = ({
         </button>
 
         <SubdomainIcon
-          name={folder.subdomainPart || folder.rootDomain}
+          name={folder.fullDomain}
           isRoot={folder.isRoot}
           size={20}
           className="h-9 w-9 shadow-xs"
@@ -41,10 +42,10 @@ export const MailFolderDetailHeader: React.FC<MailFolderDetailHeaderProps> = ({
 
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="font-display text-sm font-semibold text-fg-primary truncate leading-tight">
+            <h2 className={`font-display text-sm font-semibold truncate leading-tight ${theme.domainTextClass}`}>
               {title}
             </h2>
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-elevated border border-default text-fg-secondary">
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${theme.badgeClass}`}>
               {folder.isRoot ? 'Root Domain' : 'Subdomain Folder'}
             </span>
           </div>

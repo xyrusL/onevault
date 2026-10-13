@@ -2,11 +2,14 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowBendUpRight,
   At,
+  Check,
+  CornersOut,
   FileText,
   LockSimple,
   User,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { BaseModal } from '../../../shared/components/modals';
 import { CustomSelect, SelectOption } from '../../../shared/components/forms';
 import {
   CreateMailPayload,
@@ -61,6 +64,7 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
 
   const [forwardTo, setForwardTo] = useState(NO_FORWARD);
   const [note, setNote] = useState('');
+  const [isFullViewOpen, setIsFullViewOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -265,7 +269,7 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
         />
       </div>
 
-      {/* Optional Note Field */}
+      {/* Optional Note Field with Full View NotePad Expander */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs font-medium text-fg-secondary">
           <label htmlFor="mail-note">Note</label>
@@ -281,10 +285,62 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="e.g. Used for GitHub | Billing account"
-            className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid pl-8 pr-3 py-2 text-sm text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none"
+            className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid pl-8 pr-9 py-2 text-sm text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none"
           />
+          <button
+            type="button"
+            onClick={() => setIsFullViewOpen(true)}
+            title="Open full view NotePad"
+            aria-label="Open full view NotePad"
+            className="absolute right-2 inline-flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
+          >
+            <CornersOut size={13} weight="bold" />
+          </button>
         </div>
       </div>
+
+      {/* Full View NotePad Modal */}
+      <BaseModal
+        isOpen={isFullViewOpen}
+        onClose={() => setIsFullViewOpen(false)}
+        title="NotePad"
+        subtitle={
+          sanitizedName && effectiveDomain
+            ? `${sanitizedName}@${effectiveDomain}`
+            : 'Draft Email Note'
+        }
+        icon={<FileText size={16} weight="bold" className="text-accent" />}
+        maxWidthClass="max-w-2xl"
+        footer={
+          <div className="flex items-center justify-between w-full">
+            <span className="text-[11px] font-mono text-fg-muted">
+              {note.length} characters{note.trim() ? ` · ${note.trim().split(/\s+/).length} words` : ''}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsFullViewOpen(false)}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-accent hover:bg-accent-hover text-accent-fg px-3.5 py-1.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <Check size={13} weight="bold" />
+              <span>Done</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-xs text-fg-muted leading-relaxed">
+            Write extended notes, sentences, instructions, or documentation for this address:
+          </p>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={10}
+            placeholder="Type your notes or sentences here..."
+            className="w-full rounded-lg bg-input hover:bg-input-hover focus:bg-surface-solid p-3.5 text-sm text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none resize-y leading-relaxed font-sans min-h-[220px]"
+            autoFocus
+          />
+        </div>
+      </BaseModal>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-2 pt-2.5 border-t border-subtle">
