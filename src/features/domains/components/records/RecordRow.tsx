@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BookOpenText,
   Check,
   CloudCheck,
   CloudSlash,
@@ -233,14 +234,25 @@ export const RecordRow: React.FC<RecordRowProps> = ({
       {/* 6. Actions */}
       <td className="px-4 py-3 align-middle whitespace-nowrap text-right">
         <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={() => onEdit(record)}
-            title="Edit record"
-            className="rounded-md p-1.5 text-fg-muted hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
-          >
-            <PencilSimple size={14} weight="bold" />
-          </button>
+          {record.locked ? (
+            <button
+              type="button"
+              onClick={() => onEdit(record)}
+              title="Read-only record details (Locked by Cloudflare)"
+              className="rounded-md p-1.5 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 transition-colors cursor-pointer"
+            >
+              <BookOpenText size={14} weight="duotone" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onEdit(record)}
+              title="Edit record"
+              className="rounded-md p-1.5 text-fg-muted hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
+            >
+              <PencilSimple size={14} weight="bold" />
+            </button>
+          )}
           {record.locked ? (
             <button
               type="button"

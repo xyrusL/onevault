@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  BookOpenText,
   Check,
   CloudCheck,
   CloudSlash,
@@ -84,7 +85,7 @@ export const MobileRecordCard: React.FC<MobileRecordCardProps> = ({
           )}
         </div>
 
-        {/* Right: Proxy Icon + Edit + Delete/Lock Icon */}
+        {/* Right: Proxy Icon + Edit/Read + Delete/Lock Icon */}
         <div className="flex items-center gap-1 shrink-0">
           {isProxyEligible && (
             record.proxied ? (
@@ -104,15 +105,27 @@ export const MobileRecordCard: React.FC<MobileRecordCardProps> = ({
             )
           )}
 
-          <button
-            type="button"
-            onClick={() => onEdit(record)}
-            title="Edit record"
-            aria-label="Edit record"
-            className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-subtle bg-elevated/70 text-fg-secondary hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
-          >
-            <PencilSimple size={13} weight="bold" />
-          </button>
+          {record.locked ? (
+            <button
+              type="button"
+              onClick={() => onEdit(record)}
+              title="Read-only record details (Locked by Cloudflare)"
+              aria-label="Read record details"
+              className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-sky-500/25 bg-sky-500/10 text-sky-400 hover:bg-sky-500/20 transition-colors cursor-pointer"
+            >
+              <BookOpenText size={13} weight="duotone" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onEdit(record)}
+              title="Edit record"
+              aria-label="Edit record"
+              className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-md border border-subtle bg-elevated/70 text-fg-secondary hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
+            >
+              <PencilSimple size={13} weight="bold" />
+            </button>
+          )}
 
           {record.locked ? (
             <span

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  BookOpenText,
   CircleNotch,
   CloudCheck,
   CloudSlash,
@@ -56,6 +57,9 @@ const TTL_OPTIONS: SelectOption<string>[] = [
   { value: '86400', label: '1 day' },
 ];
 
+const INPUT_CLASS =
+  'w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden read-only:opacity-80 read-only:cursor-default read-only:hover:bg-input read-only:focus:border-default read-only:focus:ring-0';
+
 export const EditRecordModal: React.FC<EditRecordModalProps> = ({
   isOpen,
   record,
@@ -87,6 +91,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
 
   if (!record) return null;
 
+  const isReadOnly = Boolean(record.locked);
   const isProxiable = ['A', 'AAAA', 'CNAME'].includes(type);
   const cleanSub = subdomain.trim();
   const previewHost =
@@ -96,6 +101,8 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isReadOnly) return;
+
     if (!content.trim()) {
       setError('Destination / Value cannot be empty.');
       return;
@@ -127,15 +134,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              IPv4 address (required)
+              IPv4 address {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder="192.0.2.1"
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -143,15 +153,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              IPv6 address (required)
+              IPv6 address {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder="2001:db8::1"
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -159,15 +172,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              Target (required)
+              Target {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder="example.pages.dev or cname.vercel-dns.com"
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -176,15 +192,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
               <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-                Mail server (required)
+                Mail server {isReadOnly ? '' : '(required)'}
               </label>
               <input
                 id="edit-content-input"
                 type="text"
+                readOnly={isReadOnly}
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => {
+                  if (!isReadOnly) setContent(e.target.value);
+                }}
                 placeholder="route1.mx.cloudflare.net"
-                className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+                className={INPUT_CLASS}
               />
             </div>
             <div>
@@ -196,10 +215,13 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
                 type="number"
                 min="0"
                 max="65535"
+                readOnly={isReadOnly}
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => {
+                  if (!isReadOnly) setPriority(e.target.value);
+                }}
                 placeholder="10"
-                className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+                className={INPUT_CLASS}
               />
             </div>
           </div>
@@ -209,32 +231,37 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label htmlFor="edit-content-input" className="text-xs font-medium text-fg-secondary">
-                Content (required)
+                Content {isReadOnly ? '' : '(required)'}
               </label>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setContent('v=spf1 include:_spf.mx.cloudflare.net ~all')}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-elevated border border-subtle text-accent hover:border-accent cursor-pointer"
-                >
-                  + SPF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setContent('v=DMARC1; p=none; sp=none')}
-                  className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-elevated border border-subtle text-purple-400 hover:border-purple-400 cursor-pointer"
-                >
-                  + DMARC
-                </button>
-              </div>
+              {!isReadOnly && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setContent('v=spf1 include:_spf.mx.cloudflare.net ~all')}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-elevated border border-subtle text-accent hover:border-accent cursor-pointer"
+                  >
+                    + SPF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContent('v=DMARC1; p=none; sp=none')}
+                    className="rounded px-1.5 py-0.5 text-[10px] font-mono bg-elevated border border-subtle text-purple-400 hover:border-purple-400 cursor-pointer"
+                  >
+                    + DMARC
+                  </button>
+                </div>
+              )}
             </div>
             <textarea
               id="edit-content-input"
               rows={3}
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder="v=spf1 include:_spf.mx.cloudflare.net ~all"
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden resize-none"
+              className={`${INPUT_CLASS} resize-none`}
             />
           </div>
         );
@@ -242,15 +269,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              Nameserver (required)
+              Nameserver {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder="ns1.example.com"
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -259,15 +289,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2">
               <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-                Target (required)
+                Target {isReadOnly ? '' : '(required)'}
               </label>
               <input
                 id="edit-content-input"
                 type="text"
+                readOnly={isReadOnly}
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => {
+                  if (!isReadOnly) setContent(e.target.value);
+                }}
                 placeholder="sip.example.com"
-                className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+                className={INPUT_CLASS}
               />
             </div>
             <div>
@@ -279,10 +312,13 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
                 type="number"
                 min="0"
                 max="65535"
+                readOnly={isReadOnly}
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => {
+                  if (!isReadOnly) setPriority(e.target.value);
+                }}
                 placeholder="10"
-                className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+                className={INPUT_CLASS}
               />
             </div>
           </div>
@@ -291,15 +327,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              CAA Value (required)
+              CAA Value {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder='0 issue "letsencrypt.org"'
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -307,15 +346,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
         return (
           <div>
             <label htmlFor="edit-content-input" className="block text-xs font-medium text-fg-secondary mb-1">
-              Content / Target (required)
+              Content / Target {isReadOnly ? '' : '(required)'}
             </label>
             <input
               id="edit-content-input"
               type="text"
+              readOnly={isReadOnly}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => {
+                if (!isReadOnly) setContent(e.target.value);
+              }}
               placeholder={`Enter ${type} record value`}
-              className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+              className={INPUT_CLASS}
             />
           </div>
         );
@@ -326,9 +368,19 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
     <BaseModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Edit Record"
-      subtitle={`Modify DNS settings for ${record.name}`}
-      icon={<PencilSimple size={18} weight="bold" className="text-accent" />}
+      title={isReadOnly ? 'Record Details (Read-Only)' : 'Edit Record'}
+      subtitle={
+        isReadOnly
+          ? `System-managed DNS settings for ${record.name}`
+          : `Modify DNS settings for ${record.name}`
+      }
+      icon={
+        isReadOnly ? (
+          <BookOpenText size={18} weight="duotone" className="text-sky-400" />
+        ) : (
+          <PencilSimple size={18} weight="bold" className="text-accent" />
+        )
+      }
       maxWidthClass="max-w-md"
       footer={
         <div className="flex items-center justify-end gap-2 w-full">
@@ -338,27 +390,29 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
             disabled={isSubmitting}
             className="rounded-lg border border-default bg-elevated px-3 py-1.5 text-xs font-medium text-fg-secondary hover:text-fg-primary hover:border-strong transition-colors cursor-pointer disabled:opacity-50"
           >
-            Cancel
+            {isReadOnly ? 'Close' : 'Cancel'}
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || !content.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 shadow-xs"
-          >
-            {isSubmitting && <CircleNotch size={13} weight="bold" className="animate-spin" />}
-            <span>{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
-          </button>
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || !content.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 shadow-xs"
+            >
+              {isSubmitting && <CircleNotch size={13} weight="bold" className="animate-spin" />}
+              <span>{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
+            </button>
+          )}
         </div>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-3.5">
-        {/* Cloudflare Locked Warning */}
-        {record.locked && (
+        {/* Cloudflare Locked Read-Only Notice */}
+        {isReadOnly && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
             <Lock size={15} weight="fill" className="text-amber-400 shrink-0" />
             <span>
-              <strong>Cloudflare System Record:</strong> Generated automatically by Cloudflare. Changing values may affect Email Routing or SSL security.
+              <strong>Cloudflare Locked (Read-Only):</strong> Generated automatically by Cloudflare. Editing and deletion are disabled to protect Email Routing and SSL security.
             </span>
           </div>
         )}
@@ -423,7 +477,9 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
               value={type}
               options={TYPE_OPTIONS}
               maxHeightClass="max-h-60"
+              disabled={isReadOnly}
               onChange={(val) => {
+                if (isReadOnly) return;
                 setType(val);
                 if (!['A', 'AAAA', 'CNAME'].includes(val)) {
                   setProxied(false);
@@ -443,10 +499,13 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
               <input
                 id="edit-name-input"
                 type="text"
+                readOnly={isReadOnly}
                 value={subdomain}
-                onChange={(e) => setSubdomain(e.target.value)}
+                onChange={(e) => {
+                  if (!isReadOnly) setSubdomain(e.target.value);
+                }}
                 placeholder="e.g. @ or app, mail, api"
-                className="flex-1 rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-2 text-xs font-mono text-fg-primary transition-colors outline-hidden"
+                className={`flex-1 ${INPUT_CLASS}`}
               />
               <span className="font-mono text-xs text-fg-muted shrink-0 px-1 hidden sm:inline">
                 .{record.domainName}
@@ -487,11 +546,14 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
 
             <button
               type="button"
-              onClick={() => setProxied((prev) => !prev)}
+              disabled={isReadOnly}
+              onClick={() => {
+                if (!isReadOnly) setProxied((prev) => !prev);
+              }}
               aria-label="Toggle proxy status"
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
-                proxied ? 'bg-amber-500' : 'bg-subtle'
-              }`}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                isReadOnly ? 'opacity-65 cursor-not-allowed' : 'cursor-pointer'
+              } ${proxied ? 'bg-amber-500' : 'bg-subtle'}`}
             >
               <span
                 className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
@@ -511,7 +573,10 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
             value={ttl}
             options={TTL_OPTIONS}
             maxHeightClass="max-h-48"
-            onChange={setTtl}
+            disabled={isReadOnly}
+            onChange={(val) => {
+              if (!isReadOnly) setTtl(val);
+            }}
           />
         </div>
 
@@ -521,15 +586,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({
             htmlFor="edit-comment-input"
             className="block text-xs font-medium text-fg-secondary mb-1"
           >
-            Comment (optional)
+            Comment {isReadOnly ? '' : '(optional)'}
           </label>
           <input
             id="edit-comment-input"
             type="text"
+            readOnly={isReadOnly}
             value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="e.g. Production web application or verification tag"
-            className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-1.5 text-xs text-fg-primary transition-colors outline-hidden"
+            onChange={(e) => {
+              if (!isReadOnly) setComment(e.target.value);
+            }}
+            placeholder={isReadOnly ? 'No comment' : 'e.g. Production web application or verification tag'}
+            className="w-full rounded-lg border border-default bg-input hover:bg-input-hover focus:border-focus focus:ring-1 focus:ring-accent-ring px-3 py-1.5 text-xs text-fg-primary transition-colors outline-hidden read-only:opacity-80 read-only:cursor-default read-only:hover:bg-input read-only:focus:border-default read-only:focus:ring-0"
           />
         </div>
 

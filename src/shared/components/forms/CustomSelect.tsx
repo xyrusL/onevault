@@ -15,6 +15,7 @@ interface CustomSelectProps<T extends string = string> {
   icon?: React.ReactNode;
   placeholder?: string;
   maxHeightClass?: string;
+  disabled?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export function CustomSelect<T extends string = string>({
   icon,
   placeholder = 'Select option',
   maxHeightClass = 'max-h-52',
+  disabled = false,
 }: CustomSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,13 +79,18 @@ export function CustomSelect<T extends string = string>({
       <button
         id={id}
         type="button"
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={`group flex w-full items-center justify-between gap-2 rounded-md bg-input hover:bg-input-hover px-3 py-2 text-sm text-fg-primary border transition-all duration-200 cursor-pointer ${
-          isOpen
-            ? 'border-focus bg-surface-solid ring-2 ring-accent-ring'
-            : 'border-default hover:border-strong'
+        onClick={() => {
+          if (!disabled) setIsOpen((prev) => !prev);
+        }}
+        className={`group flex w-full items-center justify-between gap-2 rounded-md bg-input px-3 py-2 text-sm text-fg-primary border transition-all duration-200 ${
+          disabled
+            ? 'border-subtle opacity-75 cursor-not-allowed'
+            : isOpen
+              ? 'border-focus bg-surface-solid ring-2 ring-accent-ring cursor-pointer'
+              : 'border-default hover:border-strong hover:bg-input-hover cursor-pointer'
         }`}
       >
         <span className="flex items-center gap-2.5 min-w-0 truncate">
@@ -97,17 +104,19 @@ export function CustomSelect<T extends string = string>({
           </span>
         </span>
 
-        <CaretDown
-          size={14}
-          weight="bold"
-          className={`shrink-0 text-fg-muted group-hover:text-fg-primary transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-fg-primary' : ''
-          }`}
-        />
+        {!disabled && (
+          <CaretDown
+            size={14}
+            weight="bold"
+            className={`shrink-0 text-fg-muted group-hover:text-fg-primary transition-transform duration-200 ${
+              isOpen ? 'rotate-180 text-fg-primary' : ''
+            }`}
+          />
+        )}
       </button>
 
       {/* Custom Floating Options Menu */}
-      {isOpen && (
+      {isOpen && !disabled && (
         <div
           role="listbox"
           className="ov-dropdown-menu absolute left-0 right-0 top-[calc(100%+6px)] z-50 rounded-lg bg-surface-solid border border-default p-1 shadow-card"
