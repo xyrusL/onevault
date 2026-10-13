@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "onevault-worker",
+  "account_id": "4002cabf9107796667c42a5eed175298",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-10-01",
 
