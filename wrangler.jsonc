@@ -29,5 +29,12 @@
     }
   ],
 
+  "routes": [
+    {
+      "pattern": "api.onevault.ainxe.com",
+      "custom_domain": true
+    }
+  ],
+
   "observability": { "enabled": true }
 }

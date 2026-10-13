@@ -76,7 +76,7 @@ An edge-native, zero-trust cloud vault and domain management platform built on *
    ```bash
    npm run cf:deploy
    ```
-   Note your deployed worker URL (e.g., `https://onevault-worker.<subdomain>.workers.dev`).
+   Wrangler will automatically provision and attach the custom domain `https://api.onevault.ainxe.com` with a dedicated free SSL certificate.
 
 ### 2. Deploy Frontend to Vercel
 
@@ -85,8 +85,8 @@ An edge-native, zero-trust cloud vault and domain management platform built on *
 3. Build Command: `npm run build`
 4. Output Directory: `dist`
 5. In **Environment Variables**, add:
-   - `VITE_WORKER_URL`: `https://onevault-worker.<subdomain>.workers.dev`
-6. Click **Deploy**.
+   - `VITE_WORKER_URL`: `https://api.onevault.ainxe.com`
+6. Add your custom domain `onevault.ainxe.com` in Vercel's Domains settings and click **Deploy**.
 
 ---
 
