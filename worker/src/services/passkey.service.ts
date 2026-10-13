@@ -81,10 +81,35 @@ export const passkeyService = {
     // rpID is hostname without protocol or port
     const rpID = parsedOrigin.hostname;
 
+    // Cross-origin allowed origins and RP IDs for OneVault domains (ainxe.com, dezely.com, local)
+    const allowedRPIDs = Array.from(
+      new Set([
+        rpID,
+        'onevault.ainxe.com',
+        'onevault.dezely.com',
+        'ainxe.com',
+        'dezely.com',
+        'localhost',
+        '127.0.0.1',
+      ])
+    );
+
+    const allowedOrigins = Array.from(
+      new Set([
+        parsedOrigin.origin,
+        'https://onevault.ainxe.com',
+        'https://onevault.dezely.com',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+      ])
+    );
+
     return {
       rpID,
       rpName: 'OneVault',
       origin: parsedOrigin.origin,
+      allowedRPIDs,
+      allowedOrigins,
     };
   },
 
@@ -263,8 +288,8 @@ export const passkeyService = {
     const verification = await verifyRegistrationResponse({
       response: payload.response,
       expectedChallenge: challengeRow.challenge,
-      expectedOrigin: rpInfo.origin,
-      expectedRPID: rpInfo.rpID,
+      expectedOrigin: (rpInfo as any).allowedOrigins || rpInfo.origin,
+      expectedRPID: (rpInfo as any).allowedRPIDs || rpInfo.rpID,
       requireUserVerification: false,
     });
 
@@ -387,8 +412,8 @@ export const passkeyService = {
         const verification = await verifyAuthenticationResponse({
           response: payload.response,
           expectedChallenge: ch.challenge,
-          expectedOrigin: rpInfo.origin,
-          expectedRPID: rpInfo.rpID,
+          expectedOrigin: (rpInfo as any).allowedOrigins || rpInfo.origin,
+          expectedRPID: (rpInfo as any).allowedRPIDs || rpInfo.rpID,
           credential: {
             id: passkey.id,
             publicKey: publicKeyBytes,

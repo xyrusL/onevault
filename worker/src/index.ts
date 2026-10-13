@@ -70,6 +70,16 @@ app.use('*', async (c, next) => {
   c.res.headers.set('X-XSS-Protection', '1; mode=block');
 });
 
+// WebAuthn Related Origins manifest (allows cross-domain passkey sharing between ainxe.com and dezely.com)
+app.get('/.well-known/webauthn', (c) => {
+  return c.json({
+    origins: [
+      'https://onevault.ainxe.com',
+      'https://onevault.dezely.com',
+    ],
+  });
+});
+
 // Public
 app.route('/api/auth', authRoutes);
 
