@@ -90,12 +90,12 @@ export const FolderEditorModalContent: React.FC<FolderEditorModalContentProps> =
         />
       </div>
 
-      {/* Color Selection (mockup pastel options) */}
+      {/* Color Selection (color-only swatches) */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-semibold text-fg-secondary uppercase tracking-wider block">
           Folder Theme Color
         </label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-8 gap-2">
           {FOLDER_COLOR_OPTIONS.map((c) => {
             const isSelected = color === c.id;
             return (
@@ -103,20 +103,24 @@ export const FolderEditorModalContent: React.FC<FolderEditorModalContentProps> =
                 key={c.id}
                 type="button"
                 onClick={() => setColor(c.id)}
-                className={`flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer text-left text-xs ${
+                title={c.label}
+                aria-label={c.label}
+                className={`flex h-10 w-full items-center justify-center rounded-xl border transition-all cursor-pointer ${
                   c.bgClass
                 } ${
                   isSelected
-                    ? 'border-accent ring-2 ring-accent/30 font-semibold'
-                    : 'border-transparent hover:opacity-90'
+                    ? 'border-accent ring-2 ring-accent/30 scale-[1.03]'
+                    : 'border-transparent hover:opacity-90 hover:scale-[1.03]'
                 }`}
               >
                 <span
-                  className="h-3.5 w-3.5 rounded-full shrink-0 shadow-2xs"
+                  className="flex h-5 w-5 items-center justify-center rounded-full shrink-0 shadow-xs"
                   style={{ backgroundColor: c.dotColor }}
-                />
-                <span className="truncate flex-1">{c.label}</span>
-                {isSelected && <Check size={12} weight="bold" />}
+                >
+                  {isSelected && (
+                    <Check size={12} weight="bold" className="text-white drop-shadow-2xs" />
+                  )}
+                </span>
               </button>
             );
           })}
