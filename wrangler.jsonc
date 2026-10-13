@@ -32,7 +32,7 @@
 
   "routes": [
     {
-      "pattern": "api.onevault.ainxe.com",
+      "pattern": "onevault.ainxe.com",
       "custom_domain": true
     }
   ],

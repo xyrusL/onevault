@@ -6,10 +6,11 @@ An edge-native, zero-trust cloud vault and domain management platform built on *
 
 ## Architecture Overview
 
-- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS. Hosted on **Vercel** or Cloudflare Pages/Worker static assets.
-- **Backend / API**: Cloudflare Workers (`worker/src/index.ts`) with Hono framework, running globally at the edge 24/7.
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS served via **Cloudflare Workers Static Assets** (free, unlimited requests & bandwidth).
+- **Backend / API**: Cloudflare Workers (`worker/src/index.ts`) with Hono framework, running globally at `/api/*` 24/7.
 - **Database**: Cloudflare D1 SQL database (`onevault-storage`).
 - **Email Engine**: Cloudflare Email Routing with worker routing rules.
+- **Live Domain**: [`https://onevault.ainxe.com`](https://onevault.ainxe.com)
 
 ---
 
@@ -33,11 +34,11 @@ An edge-native, zero-trust cloud vault and domain management platform built on *
    npm install
    ```
 
-3. Set up environment variables:
+3. Set up local secrets:
    ```bash
-   cp .env.example .env
+   cp .env.example .dev.vars
    ```
-   Fill in your Cloudflare credentials and session secret in `.env`.
+   Fill in your Cloudflare credentials and session secret in `.dev.vars`.
 
 4. Run the local D1 migrations:
    ```bash
@@ -55,38 +56,31 @@ An edge-native, zero-trust cloud vault and domain management platform built on *
 
 ---
 
-## Production Deployment
+## Production Deployment (100% Cloudflare)
 
-### 1. Deploy Cloudflare Worker (24/7 Edge Backend)
+Both the React frontend (`./dist`) and the Hono backend (`worker/src/index.ts`) deploy together in a single command to **`https://onevault.ainxe.com`**:
 
-1. Apply migrations to your remote Cloudflare D1 database:
+1. **Apply D1 Migrations to Remote Database**:
    ```bash
    npm run db:migrate:remote
    ```
 
-2. Push production secrets to Cloudflare:
+2. **Upload Production Secrets**:
    ```bash
-   wrangler secret put CF_API_TOKEN
-   wrangler secret put ADMIN_EMAIL
-   wrangler secret put ADMIN_PASSWORD
-   wrangler secret put SESSION_SECRET
+   npx wrangler secret bulk .dev.vars
    ```
 
-3. Deploy the worker:
+3. **Build & Deploy (Frontend + Backend Worker)**:
    ```bash
    npm run cf:deploy
    ```
-   Wrangler will automatically provision and attach the custom domain `https://api.onevault.ainxe.com` with a dedicated free SSL certificate.
 
-### 2. Deploy Frontend to Vercel
+### Optional: Automatic GitHub Deployments on Cloudflare
+In the [Cloudflare Dashboard](https://dash.cloudflare.com/) under **Workers & Pages > `onevault-worker` > Settings > Builds**, connect your GitHub repository (`xyrusL/onevault`):
+- **Build command:** `npm run build`
+- **Deploy command:** `npx wrangler deploy`
 
-1. Import your GitHub repository (`xyrusL/onevault`) in the [Vercel Dashboard](https://vercel.com).
-2. Framework Preset: **Vite**
-3. Build Command: `npm run build`
-4. Output Directory: `dist`
-5. In **Environment Variables**, add:
-   - `VITE_WORKER_URL`: `https://api.onevault.ainxe.com`
-6. Add your custom domain `onevault.ainxe.com` in Vercel's Domains settings and click **Deploy**.
+Every `git push` to `main` will automatically build Vite + TypeScript and deploy to `https://onevault.ainxe.com`.
 
 ---
 
