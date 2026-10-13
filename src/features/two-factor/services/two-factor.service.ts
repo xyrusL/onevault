@@ -147,8 +147,8 @@ export const twoFactorService = {
 
   /**
    * Parses either a full `otpauth://totp/...` URI, a URL with query parameters,
-   * or a raw Base32 secret string, and automatically extracts/generates the
-   * Service Name (`issuer`) and Account (`label`).
+   * or a raw Base32 secret string, and extracts the real Service Name (`issuer`)
+   * and Account (`label`) when present in the URI/QR payload. Never populates fake demo data.
    */
   parseOtpInput(
     input: string,
@@ -168,43 +168,122 @@ export const twoFactorService = {
       second: '2-digit',
     });
 
-    if (trimmed.toLowerCase().startsWith('otpauth://')) {
-      const parsed = OTPAuth.URI.parse(trimmed);
-      if (!(parsed instanceof OTPAuth.TOTP)) {
+    const otpauthMatch = trimmed.match(/otpauth:\/\/[^\s"']+/i);
+    if (otpauthMatch || trimmed.toLowerCase().startsWith('otpauth://')) {
+      const uriString = otpauthMatch ? otpauthMatch[0] : trimmed;
+
+      // Extract path & query parameters directly so all real-world QR formats work
+      const uriPartsMatch = uriString.match(/^otpauth:\/\/([ht]otp)\/([^?]*)(?:\?(.*))?$/i);
+      if (!uriPartsMatch) {
+        throw new Error('Invalid otpauth:// URI format.');
+      }
+
+      const otpType = uriPartsMatch[1].toLowerCase();
+      if (otpType !== 'totp') {
         throw new Error('Only TOTP (time-based) 2FA URIs are supported.');
       }
 
-      let detectedIssuer = parsed.issuer?.trim() || '';
-      let detectedLabel = parsed.label?.trim() || '';
+      const rawPath = decodeURIComponent((uriPartsMatch[2] || '').replace(/\+/g, '%20'))
+        .replace(/^\/+/, '')
+        .trim();
+      const rawQuery = uriPartsMatch[3] || '';
+      const searchParams = new URLSearchParams(rawQuery);
 
-      // If label contains "Issuer:account" and issuer was empty, split it
-      if (!detectedIssuer && detectedLabel.includes(':')) {
-        const [prefix, ...rest] = detectedLabel.split(':');
-        detectedIssuer = prefix.trim();
-        detectedLabel = rest.join(':').trim();
+      const getParam = (key: string): string => {
+        for (const [k, v] of searchParams.entries()) {
+          if (k.toLowerCase() === key.toLowerCase()) {
+            return v.trim();
+          }
+        }
+        return '';
+      };
+
+      let pathIssuer = '';
+      let pathAccount = '';
+
+      if (rawPath.includes(':')) {
+        const colonIdx = rawPath.indexOf(':');
+        pathIssuer = rawPath.slice(0, colonIdx).trim();
+        pathAccount = rawPath.slice(colonIdx + 1).trim();
+      } else if (rawPath.includes('/')) {
+        const slashIdx = rawPath.indexOf('/');
+        pathIssuer = rawPath.slice(0, slashIdx).trim();
+        pathAccount = rawPath.slice(slashIdx + 1).trim();
+      } else {
+        pathAccount = rawPath;
       }
 
-      const finalIssuer =
-        customIssuer?.trim() || detectedIssuer || 'OneVault Token';
-      const finalLabel =
-        customLabel?.trim() || detectedLabel || 'vault@ainxe.com';
-      const secretBase32 = parsed.secret.base32;
+      const queryIssuer = getParam('issuer') || getParam('service');
+      const queryAccount =
+        getParam('account') ||
+        getParam('username') ||
+        getParam('user') ||
+        getParam('label');
+
+      let detectedIssuer = queryIssuer || pathIssuer;
+      let detectedLabel = pathAccount || queryAccount;
+
+      // Strip redundant "Issuer:" prefix if still present in label
+      if (
+        detectedIssuer &&
+        detectedLabel.toLowerCase().startsWith(`${detectedIssuer.toLowerCase()}:`)
+      ) {
+        detectedLabel = detectedLabel.slice(detectedIssuer.length + 1).trim();
+      }
+
+      // If path only contained the issuer name and query has an account parameter
+      if (
+        detectedIssuer &&
+        detectedLabel.toLowerCase() === detectedIssuer.toLowerCase() &&
+        queryAccount
+      ) {
+        detectedLabel = queryAccount;
+      }
+
+      const rawSecret = getParam('secret')
+        .replace(/[\s-]+/g, '')
+        .replace(/=+$/g, '')
+        .toUpperCase();
+
+      if (!rawSecret || !/^[A-Z2-7]+$/.test(rawSecret)) {
+        throw new Error('Missing or invalid Base32 secret in otpauth:// URI.');
+      }
+
+      const secretObj = OTPAuth.Secret.fromBase32(rawSecret);
+
+      const rawAlgo = getParam('algorithm').toUpperCase();
+      const algorithm: 'SHA1' | 'SHA256' | 'SHA512' =
+        rawAlgo === 'SHA256' || rawAlgo === 'SHA512' ? rawAlgo : 'SHA1';
+      const digits = Number(getParam('digits')) || 6;
+      const period = Number(getParam('period')) || 30;
+
+      const finalIssuer = customIssuer?.trim() || detectedIssuer;
+      const finalLabel = customLabel?.trim() || detectedLabel;
+
+      const totp = new OTPAuth.TOTP({
+        issuer: finalIssuer || undefined,
+        label: finalLabel || 'Account',
+        algorithm,
+        digits,
+        period,
+        secret: secretObj,
+      });
 
       return {
         id: `2fa-${Date.now()}`,
         issuer: finalIssuer,
         label: finalLabel,
-        secret: secretBase32,
-        algorithm: (parsed.algorithm as 'SHA1' | 'SHA256' | 'SHA512') || 'SHA1',
-        digits: parsed.digits || 6,
-        period: parsed.period || 30,
-        otpauthUri: parsed.toString(),
+        secret: secretObj.base32,
+        algorithm,
+        digits,
+        period,
+        otpauthUri: totp.toString(),
         createdDate,
         createdTime,
       };
     }
 
-    // Support pasting a URL containing ?secret=... or raw Base32 secret
+    // Support pasting a URL containing ?secret=... or raw Base32 secret key
     let extractedSecret = trimmed;
     let detectedIssuer = '';
     let detectedLabel = '';
@@ -221,12 +300,13 @@ export const twoFactorService = {
           url.searchParams.get('issuer') || url.searchParams.get('service');
         const acc =
           url.searchParams.get('account') ||
-          url.searchParams.get('label') ||
-          url.searchParams.get('email');
+          url.searchParams.get('username') ||
+          url.searchParams.get('user') ||
+          url.searchParams.get('label');
 
         if (sec) extractedSecret = sec;
-        if (iss) detectedIssuer = iss;
-        if (acc) detectedLabel = acc;
+        if (iss) detectedIssuer = iss.trim();
+        if (acc) detectedLabel = acc.trim();
 
         if (!detectedIssuer && url.hostname !== 'onevault.local') {
           detectedIssuer = url.hostname.replace(/^www\./, '').split('.')[0];
@@ -240,27 +320,24 @@ export const twoFactorService = {
     }
 
     const cleanBase32 = extractedSecret
-      .replace(/[^A-Za-z2-7]/g, '')
+      .replace(/[\s-]+/g, '')
+      .replace(/=+$/g, '')
       .toUpperCase();
-    if (cleanBase32.length < 8) {
+
+    if (cleanBase32.length < 8 || !/^[A-Z2-7]+$/.test(cleanBase32)) {
       throw new Error(
-        'Invalid 2FA URL or Base32 secret. Provide an otpauth://totp/... URL or valid secret key.'
+        'Invalid 2FA URL or Base32 secret. Provide an otpauth://totp/... URL or valid Base32 secret key.'
       );
     }
 
     const secretObj = OTPAuth.Secret.fromBase32(cleanBase32);
-    const shortTag = cleanBase32.slice(0, 4).toLowerCase();
 
-    const finalIssuer =
-      customIssuer?.trim() ||
-      detectedIssuer ||
-      `Vault Key (${cleanBase32.slice(0, 4)})`;
-    const finalLabel =
-      customLabel?.trim() || detectedLabel || `token.${shortTag}@ainxe.com`;
+    const finalIssuer = customIssuer?.trim() || detectedIssuer || '';
+    const finalLabel = customLabel?.trim() || detectedLabel || '';
 
     const totp = new OTPAuth.TOTP({
-      issuer: finalIssuer,
-      label: finalLabel,
+      issuer: finalIssuer || undefined,
+      label: finalLabel || 'Account',
       algorithm: 'SHA1',
       digits: 6,
       period: 30,
@@ -282,7 +359,8 @@ export const twoFactorService = {
   },
 
   /**
-   * Locally decodes a dropped or uploaded QR Code image file using `jsQR` on an HTML5 Canvas.
+   * Locally decodes a dropped or uploaded QR Code image file using native BarcodeDetector
+   * (when available) plus multi-pass `jsQR` with white/dark quiet-zone padding.
    */
   async decodeQrImageFile(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -291,38 +369,85 @@ export const twoFactorService = {
       reader.onload = () => {
         const img = new Image();
         img.onerror = () => reject(new Error('Invalid image file format.'));
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Canvas context unavailable.'));
-            return;
-          }
-
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0, img.width, img.height);
-
-          const imageData = ctx.getImageData(0, 0, img.width, img.height);
-          const qrResult = jsQR(
-            imageData.data,
-            imageData.width,
-            imageData.height,
-            {
-              inversionAttempts: 'attemptBoth',
+        img.onload = async () => {
+          // 1. Try native browser BarcodeDetector API first if supported
+          try {
+            if ('BarcodeDetector' in window) {
+              const Detector = (
+                window as unknown as {
+                  BarcodeDetector: new (opts: { formats: string[] }) => {
+                    detect: (source: HTMLImageElement) => Promise<Array<{ rawValue?: string }>>;
+                  };
+                }
+              ).BarcodeDetector;
+              const detector = new Detector({ formats: ['qr_code'] });
+              const barcodes = await detector.detect(img);
+              if (barcodes?.[0]?.rawValue) {
+                resolve(barcodes[0].rawValue);
+                return;
+              }
             }
-          );
-
-          if (!qrResult || !qrResult.data) {
-            reject(
-              new Error(
-                'No valid QR code found in this image. Please try a clearer QR image.'
-              )
-            );
-            return;
+          } catch {
+            // Fall through to canvas jsQR passes
           }
 
-          resolve(qrResult.data);
+          // 2. Multi-pass jsQR decoding (handles transparent PNGs, cropped QR codes, dark mode, and high-DPI screenshots)
+          const tryDecodeCanvas = (
+            scale: number,
+            padding: number,
+            bgColor: string
+          ): string | null => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+
+            const drawW = Math.max(1, Math.round(img.width * scale));
+            const drawH = Math.max(1, Math.round(img.height * scale));
+            canvas.width = drawW + padding * 2;
+            canvas.height = drawH + padding * 2;
+
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, padding, padding, drawW, drawH);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const qrResult = jsQR(
+              imageData.data,
+              imageData.width,
+              imageData.height,
+              {
+                inversionAttempts: 'attemptBoth',
+              }
+            );
+            return qrResult?.data || null;
+          };
+
+          const maxDim = Math.max(img.width, img.height, 1);
+          const normalizedScale = maxDim > 800 ? 600 / maxDim : maxDim < 220 ? 360 / maxDim : 1;
+
+          const attempts: Array<[number, number, string]> = [
+            [1, 32, '#FFFFFF'],
+            [1, 0, '#FFFFFF'],
+            [1, 32, '#000000'],
+            [normalizedScale, 32, '#FFFFFF'],
+            [normalizedScale, 32, '#000000'],
+            [1.5, 40, '#FFFFFF'],
+          ];
+
+          for (const [scale, pad, bg] of attempts) {
+            const decoded = tryDecodeCanvas(scale, pad, bg);
+            if (decoded) {
+              resolve(decoded);
+              return;
+            }
+          }
+
+          reject(
+            new Error(
+              'No valid QR code found in this image. Please try a clearer QR image.'
+            )
+          );
         };
         img.src = reader.result as string;
       };

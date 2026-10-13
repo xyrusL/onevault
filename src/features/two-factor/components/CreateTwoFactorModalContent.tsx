@@ -69,9 +69,13 @@ export const CreateTwoFactorModalContent: React.FC<
       const rawQrData = await twoFactorService.decodeQrImageFile(file);
       const token = twoFactorService.parseOtpInput(rawQrData);
       setDecodedToken(token);
-      // Automatically fill Service Name and Account / Email from detected QR
-      setIssuerInput(token.issuer);
-      setLabelInput(token.label);
+      // Automatically fill Service Name and Account from detected QR
+      if (token.issuer) {
+        setIssuerInput(token.issuer);
+      }
+      if (token.label) {
+        setLabelInput(token.label);
+      }
     } catch (err) {
       setDecodedToken(null);
       setErrorMessage(
@@ -88,9 +92,13 @@ export const CreateTwoFactorModalContent: React.FC<
       try {
         const detected = twoFactorService.parseOtpInput(value);
         setDecodedToken(detected);
-        // Automatically populate Service Name and Account / Email when detected
-        setIssuerInput(detected.issuer);
-        setLabelInput(detected.label);
+        // Only auto-populate Service Name and Account when real metadata is present in the URI
+        if (detected.issuer) {
+          setIssuerInput(detected.issuer);
+        }
+        if (detected.label) {
+          setLabelInput(detected.label);
+        }
       } catch {
         setDecodedToken(null);
       }
@@ -126,17 +134,30 @@ export const CreateTwoFactorModalContent: React.FC<
           setErrorMessage('Please drop or select a valid 2FA QR code image.');
           return;
         }
-        token = {
-          ...decodedToken,
-          issuer: issuerInput.trim() || decodedToken.issuer,
-          label: labelInput.trim() || decodedToken.label,
-        };
-      } else {
+        const finalIssuer = issuerInput.trim() || decodedToken.issuer.trim();
+        const finalLabel = labelInput.trim() || decodedToken.label.trim();
+        if (!finalIssuer || !finalLabel) {
+          setErrorMessage('Please enter both Service Name and Account.');
+          return;
+        }
         token = twoFactorService.parseOtpInput(
+          decodedToken.otpauthUri,
+          finalIssuer,
+          finalLabel
+        );
+      } else {
+        const parsed = twoFactorService.parseOtpInput(
           manualInput,
           issuerInput,
           labelInput
         );
+        if (!parsed.issuer.trim() || !parsed.label.trim()) {
+          setErrorMessage(
+            'Raw secret keys do not include service info. Please enter Service Name and Account below.'
+          );
+          return;
+        }
+        token = parsed;
       }
 
       setIsSubmitting(true);
@@ -276,14 +297,14 @@ export const CreateTwoFactorModalContent: React.FC<
               required
               value={manualInput}
               onChange={(e) => handleManualInputChange(e.target.value)}
-              placeholder="otpauth://totp/GitHub:user?secret=JBSWY3DPEHPK3PXP..."
+              placeholder="otpauth://totp/GitHub:user?secret=... or secret key"
               className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid pl-8 pr-3 py-2 font-mono text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none"
             />
           </div>
         </div>
       )}
 
-      {/* Auto-Populated Service Name & Account | Email */}
+      {/* Auto-Populated Service Name & Account */}
       <div className="grid grid-cols-2 gap-2.5">
         <div className="space-y-1">
           <label
@@ -297,7 +318,9 @@ export const CreateTwoFactorModalContent: React.FC<
             type="text"
             value={issuerInput}
             onChange={(e) => setIssuerInput(e.target.value)}
-            placeholder="Auto-filled on detect"
+            placeholder={
+              method === 'qr-image' ? 'Auto-filled on detect' : 'e.g. GitHub'
+            }
             className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid px-2.5 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none"
           />
         </div>
@@ -307,14 +330,16 @@ export const CreateTwoFactorModalContent: React.FC<
             htmlFor="otp-label"
             className="block text-xs font-medium text-fg-secondary"
           >
-            Account | Email
+            Account
           </label>
           <input
             id="otp-label"
             type="text"
             value={labelInput}
             onChange={(e) => setLabelInput(e.target.value)}
-            placeholder="Auto-filled on detect"
+            placeholder={
+              method === 'qr-image' ? 'Auto-filled on detect' : 'e.g. username'
+            }
             className="w-full rounded-md bg-input hover:bg-input-hover focus:bg-surface-solid px-2.5 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-focus focus:outline-none"
           />
         </div>
