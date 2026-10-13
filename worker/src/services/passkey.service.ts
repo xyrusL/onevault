@@ -144,32 +144,29 @@ export const passkeyService = {
   },
 
   /**
-   * List all enrolled passkeys for a user
+   * List all enrolled passkeys for the vault
    */
-  async listPasskeys(env: Env, userEmail: string): Promise<PasskeyRecord[]> {
+  async listPasskeys(env: Env, _userEmail?: string): Promise<PasskeyRecord[]> {
     if (!env.DB) return [];
     await this.ensureSchema(env);
 
-    const normalized = userEmail.trim().toLowerCase();
+    // In OneVault, all enrolled passkeys belong to the vault administrator
     const { results } = await env.DB.prepare(
       `SELECT id, user_id, name, device_type, backed_up, transports, aaguid, user_agent, created_at, last_used_at
        FROM passkeys
-       WHERE lower(user_id) = ?
        ORDER BY created_at DESC`
-    )
-      .bind(normalized)
-      .all<{
-        id: string;
-        user_id: string;
-        name: string;
-        device_type: string | null;
-        backed_up: number;
-        transports: string | null;
-        aaguid: string | null;
-        user_agent: string | null;
-        created_at: string;
-        last_used_at: string | null;
-      }>();
+    ).all<{
+      id: string;
+      user_id: string;
+      name: string;
+      device_type: string | null;
+      backed_up: number;
+      transports: string | null;
+      aaguid: string | null;
+      user_agent: string | null;
+      created_at: string;
+      last_used_at: string | null;
+    }>();
 
     return (results || []).map((row) => ({
       id: row.id,
@@ -188,15 +185,14 @@ export const passkeyService = {
   /**
    * Delete / Revoke a specific passkey
    */
-  async deletePasskey(env: Env, userEmail: string, credentialId: string): Promise<boolean> {
+  async deletePasskey(env: Env, _userEmail: string, credentialId: string): Promise<boolean> {
     if (!env.DB) throw new HttpError(500, 'Database is not bound.');
     await this.ensureSchema(env);
 
-    const normalized = userEmail.trim().toLowerCase();
     const res = await env.DB.prepare(
-      `DELETE FROM passkeys WHERE id = ? AND lower(user_id) = ?`
+      `DELETE FROM passkeys WHERE id = ?`
     )
-      .bind(credentialId, normalized)
+      .bind(credentialId)
       .run();
 
     if (!res.meta.changes) {
@@ -448,8 +444,17 @@ export const passkeyService = {
       .bind(newCounter, now, passkey.id)
       .run();
 
+    // Resolve current administrator email from admin_users
+    let userEmail = passkey.user_id;
+    const admin = await env.DB.prepare('SELECT email FROM admin_users LIMIT 1')
+      .first<{ email: string }>()
+      .catch(() => null);
+    if (admin && admin.email) {
+      userEmail = admin.email;
+    }
+
     return {
-      email: passkey.user_id,
+      email: userEmail,
       passkeyName: passkey.name,
     };
   },

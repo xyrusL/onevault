@@ -23,7 +23,20 @@ export const requireAuth: MiddlewareHandler<AppBindings> = async (c, next) => {
     );
   }
 
-  c.set('userEmail', session.email);
+  // Resolve authoritative admin email from D1 database
+  let effectiveEmail = session.email;
+  if (c.env.DB) {
+    try {
+      const admin = await c.env.DB.prepare('SELECT email FROM admin_users LIMIT 1').first<{ email: string }>();
+      if (admin && admin.email) {
+        effectiveEmail = admin.email;
+      }
+    } catch {
+      // fallback to session.email
+    }
+  }
+
+  c.set('userEmail', effectiveEmail);
   await next();
 };
 

@@ -17,6 +17,7 @@ import {
   ArrowSquareOut,
 } from '@phosphor-icons/react';
 import { settingsService } from '../services/settings.service';
+import { authService } from '../../auth';
 import type { AdminAccount } from '../types/settings.types';
 import { PasskeysSection } from './passkeys';
 
@@ -57,6 +58,15 @@ export const AccountSettingsTab: React.FC<AccountSettingsTabProps> = ({
       const data = await settingsService.getAccount();
       setAccount(data);
       setNewEmail(data.email);
+
+      // Synchronize local session if it held an older email
+      const currentSession = authService.getSession();
+      if (currentSession && currentSession.email !== data.email) {
+        authService.saveSession({
+          ...currentSession,
+          email: data.email,
+        });
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load administrator account profile.');
     } finally {

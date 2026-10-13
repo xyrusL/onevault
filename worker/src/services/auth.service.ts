@@ -144,13 +144,11 @@ export const authService = {
   },
 
   async getAccount(env: Env, currentEmail: string) {
-    const normalized = currentEmail.trim().toLowerCase();
     if (env.DB) {
+      // Always return the authoritative single admin from D1 database
       const user = await env.DB.prepare(
-        'SELECT id, email, role, created_at FROM admin_users WHERE lower(email) = ?'
-      )
-        .bind(normalized)
-        .first<{ id: string; email: string; role: string; created_at: string }>();
+        'SELECT id, email, role, created_at FROM admin_users LIMIT 1'
+      ).first<{ id: string; email: string; role: string; created_at: string }>();
 
       if (user) {
         return {
