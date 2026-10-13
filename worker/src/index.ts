@@ -46,8 +46,8 @@ app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
   const pathname = decodeURIComponent(url.pathname);
 
-  // Block path traversal and hidden files / dot segments (e.g. /.env, /api/.. , /.git)
-  if (pathname.includes('..') || /(?:^|\/)\.[^/]/.test(pathname)) {
+  // Block path traversal and hidden files / dot segments (allowing standard RFC 8615 /.well-known/)
+  if (pathname.includes('..') || (/(?:^|\/)\.[^/]/.test(pathname) && !pathname.startsWith('/.well-known/'))) {
     throw new HttpError(403, 'Access denied: hidden or restricted URL.');
   }
 
