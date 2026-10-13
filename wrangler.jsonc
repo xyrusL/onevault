@@ -30,9 +30,16 @@
     }
   ],
 
+  "workers_dev": false,
+  "preview_urls": false,
+
   "routes": [
     {
       "pattern": "onevault.ainxe.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "onevault.dezely.com",
       "custom_domain": true
     }
   ],
