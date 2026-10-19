@@ -1,4 +1,4 @@
-import type { VaultExportData } from '../types/settings.types';
+import type { ValidationDiagnostics, VaultExportData } from '../types/settings.types';
 
 function bufferToHex(buffer: ArrayBuffer | Uint8Array): string {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -38,6 +38,10 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
   );
 }
 
+/**
+ * Client-Side AES-256-GCM encryption for .ovault bundles.
+ * Runs 100% in browser memory with 0 Cloudflare Worker requests.
+ */
 export async function encryptVault(
   data: VaultExportData,
   passphrase?: string
@@ -45,12 +49,16 @@ export async function encryptVault(
   const jsonStr = JSON.stringify(data, null, 2);
   if (!passphrase || !passphrase.trim()) {
     // Unencrypted wrapper for .ovault or default bundle
-    return JSON.stringify({
-      version: 2,
-      app: 'OneVault',
-      encrypted: false,
-      payload: data,
-    }, null, 2);
+    return JSON.stringify(
+      {
+        version: 2,
+        app: 'OneVault',
+        encrypted: false,
+        payload: data,
+      },
+      null,
+      2
+    );
   }
 
   const salt = window.crypto.getRandomValues(new Uint8Array(16));
@@ -80,10 +88,18 @@ export async function encryptVault(
   );
 }
 
+export interface VaultValidationResult {
+  data: VaultExportData;
+  diagnostics: ValidationDiagnostics;
+}
+
+/**
+ * Decrypts raw file string (handles .ovault, JSON, CSV) 100% locally on the device.
+ */
 export async function decryptVault(
   rawText: string,
   passphrase?: string
-): Promise<VaultExportData> {
+): Promise<VaultValidationResult> {
   const trimmed = rawText.trim();
 
   // Try parsing JSON first
@@ -92,16 +108,25 @@ export async function decryptVault(
     parsed = JSON.parse(trimmed);
   } catch {
     // If not valid JSON, check if it's CSV
-    if (trimmed.includes('=== ONEVAULT_') || trimmed.includes('email,forward_to') || trimmed.includes('title,content')) {
+    if (
+      trimmed.includes('=== ONEVAULT_') ||
+      trimmed.includes('email,forward_to') ||
+      trimmed.includes('title,content') ||
+      trimmed.includes('issuer,label,secret')
+    ) {
       return parseCsvToVault(trimmed);
     }
-    throw new Error('Unsupported or corrupted file format. Expected valid JSON, .ovault, or CSV archive.');
+    throw new Error(
+      'Unsupported or corrupted file format. Expected valid JSON, .ovault, or CSV archive.'
+    );
   }
 
   // If encrypted package
-  if (parsed.encrypted === true) {
+  if (parsed && parsed.encrypted === true) {
     if (!passphrase || !passphrase.trim()) {
-      throw new Error('This vault backup is encrypted. Please provide the encryption password/passphrase.');
+      throw new Error(
+        'This vault backup is encrypted. Please provide the encryption password/passphrase.'
+      );
     }
     try {
       const salt = hexToBuffer(parsed.salt);
@@ -116,15 +141,17 @@ export async function decryptVault(
       );
 
       const decStr = new TextDecoder().decode(decrypted);
-      const data = JSON.parse(decStr) as VaultExportData;
+      const data = JSON.parse(decStr);
       return validateVaultStructure(data);
     } catch {
-      throw new Error('Decryption failed: Incorrect password or corrupted vault bundle.');
+      throw new Error(
+        'Decryption failed: Incorrect password or corrupted vault bundle.'
+      );
     }
   }
 
   // If unencrypted wrapper
-  if (parsed.payload && typeof parsed.payload === 'object') {
+  if (parsed && parsed.payload && typeof parsed.payload === 'object') {
     return validateVaultStructure(parsed.payload);
   }
 
@@ -132,120 +159,173 @@ export async function decryptVault(
   return validateVaultStructure(parsed);
 }
 
-export function validateVaultStructure(data: any): VaultExportData {
+/**
+ * Self-structuring pre-flight validation engine.
+ * Inspects all collections, checks data types, flags errors with exact row numbers,
+ * and normalizes rows safely before sending anything to the network.
+ */
+export function validateVaultStructure(data: any): VaultValidationResult {
   if (!data || typeof data !== 'object') {
     throw new Error('Invalid vault structure: missing root object.');
   }
 
-  const collections = data.collections || data;
-  const hasValidCollections =
-    Array.isArray(collections.notes) ||
-    Array.isArray(collections.noteFolders) ||
-    Array.isArray(collections.twoFactorTokens) ||
-    Array.isArray(collections.mailAccounts) ||
-    Array.isArray(collections.mailMessages);
-
-  if (!hasValidCollections) {
-    throw new Error('Invalid vault structure: No recognized OneVault collections found (notes, 2FA, or mail).');
+  const rawCollections = data.collections || data;
+  if (!rawCollections || typeof rawCollections !== 'object') {
+    throw new Error('Invalid vault structure: missing collections.');
   }
 
-  return {
+  const diagnostics: ValidationDiagnostics = {
+    isValid: false,
+    totalRecords: 0,
+    collectionCounts: {},
+    warnings: [],
+    errors: [],
+  };
+
+  const normalizedCollections: Record<string, any[]> = {};
+  let totalCount = 0;
+
+  // Process all keys in collections dynamically
+  for (const [key, rawRows] of Object.entries(rawCollections)) {
+    if (!Array.isArray(rawRows)) continue;
+
+    const validRows: any[] = [];
+
+    rawRows.forEach((row, index) => {
+      const rowNum = index + 1;
+
+      if (!row || typeof row !== 'object') {
+        diagnostics.errors.push(`[${key}] Row #${rowNum} is not a valid object — skipped.`);
+        return;
+      }
+
+      const cleanRow: Record<string, any> = { ...row };
+
+      // Ensure primary key id exists
+      if (!cleanRow.id) {
+        cleanRow.id = `item_${crypto.randomUUID()}`;
+        diagnostics.warnings.push(`[${key}] Row #${rowNum} missing ID; auto-assigned UUID.`);
+      }
+
+      // Domain-specific sanity checks
+      if (key === 'mailAccounts') {
+        if (!cleanRow.email || typeof cleanRow.email !== 'string' || !cleanRow.email.includes('@')) {
+          diagnostics.errors.push(`[mailAccounts] Row #${rowNum} has missing or invalid email address — skipped.`);
+          return;
+        }
+      } else if (key === 'twoFactorTokens') {
+        if (!cleanRow.secret || typeof cleanRow.secret !== 'string') {
+          diagnostics.errors.push(`[twoFactorTokens] Row #${rowNum} missing required secret — skipped.`);
+          return;
+        }
+      } else if (key === 'customDomains') {
+        if (!cleanRow.name || typeof cleanRow.name !== 'string') {
+          diagnostics.errors.push(`[customDomains] Row #${rowNum} missing domain name — skipped.`);
+          return;
+        }
+      } else if (key === 'notes') {
+        if (!cleanRow.title && !cleanRow.content) {
+          diagnostics.warnings.push(`[notes] Row #${rowNum} has blank title and empty content.`);
+        }
+      }
+
+      // Timestamp normalization
+      if (cleanRow.created_at && isNaN(Date.parse(cleanRow.created_at))) {
+        cleanRow.created_at = new Date().toISOString();
+        diagnostics.warnings.push(`[${key}] Row #${rowNum} had invalid created_at timestamp; auto-corrected.`);
+      }
+      if (cleanRow.updated_at && isNaN(Date.parse(cleanRow.updated_at))) {
+        cleanRow.updated_at = cleanRow.created_at || new Date().toISOString();
+        diagnostics.warnings.push(`[${key}] Row #${rowNum} had invalid updated_at timestamp; auto-corrected.`);
+      }
+
+      validRows.push(cleanRow);
+    });
+
+    normalizedCollections[key] = validRows;
+    diagnostics.collectionCounts[key] = validRows.length;
+    totalCount += validRows.length;
+  }
+
+  diagnostics.totalRecords = totalCount;
+  diagnostics.isValid = totalCount > 0;
+
+  if (totalCount === 0 && diagnostics.errors.length === 0) {
+    throw new Error('No valid records found in the uploaded file.');
+  }
+
+  const exportData: VaultExportData = {
     version: data.version || 2,
     app: data.app || 'OneVault',
     exportedAt: data.exportedAt || new Date().toISOString(),
+    hostname: data.hostname,
     counts: {
-      mailAccounts: collections.mailAccounts?.length || 0,
-      mailSubdomains: collections.mailSubdomains?.length || 0,
-      mailMessages: collections.mailMessages?.length || 0,
-      twoFactorTokens: collections.twoFactorTokens?.length || 0,
-      noteFolders: collections.noteFolders?.length || 0,
-      notes: collections.notes?.length || 0,
-      total:
-        (collections.mailAccounts?.length || 0) +
-        (collections.mailSubdomains?.length || 0) +
-        (collections.mailMessages?.length || 0) +
-        (collections.twoFactorTokens?.length || 0) +
-        (collections.noteFolders?.length || 0) +
-        (collections.notes?.length || 0),
+      ...diagnostics.collectionCounts,
+      total: totalCount,
     },
-    collections: {
-      mailAccounts: collections.mailAccounts || [],
-      mailSubdomains: collections.mailSubdomains || [],
-      mailMessages: collections.mailMessages || [],
-      twoFactorTokens: collections.twoFactorTokens || [],
-      noteFolders: collections.noteFolders || [],
-      notes: collections.notes || [],
-    },
+    collections: normalizedCollections,
+  };
+
+  return {
+    data: exportData,
+    diagnostics,
   };
 }
 
+/**
+ * Universal Dynamic CSV Exporter.
+ * Automatically discovers columns for ANY collection without hardcoding!
+ */
 export function exportToCsv(data: VaultExportData): string {
   const sections: string[] = [];
 
-  // Helper escape CSV cell
   const esc = (val: any) => {
     if (val === null || val === undefined) return '""';
+    if (typeof val === 'object') {
+      const s = JSON.stringify(val).replace(/"/g, '""');
+      return `"${s}"`;
+    }
     const s = String(val).replace(/"/g, '""');
     return `"${s}"`;
   };
 
-  // Section 1: Notes
-  sections.push('=== ONEVAULT_NOTES ===');
-  sections.push(['id', 'title', 'content', 'folder_id', 'is_pinned', 'tags', 'created_at', 'updated_at'].map(esc).join(','));
-  for (const n of data.collections.notes || []) {
-    sections.push([
-      esc(n.id),
-      esc(n.title),
-      esc(n.content),
-      esc(n.folder_id),
-      esc(n.is_pinned),
-      esc(typeof n.tags === 'string' ? n.tags : JSON.stringify(n.tags || [])),
-      esc(n.created_at),
-      esc(n.updated_at),
-    ].join(','));
+  for (const [collectionKey, rows] of Object.entries(data.collections || {})) {
+    if (!Array.isArray(rows) || rows.length === 0) continue;
+
+    // Discover all distinct column names across all records
+    const colSet = new Set<string>();
+    for (const row of rows) {
+      if (row && typeof row === 'object') {
+        Object.keys(row).forEach((k) => colSet.add(k));
+      }
+    }
+
+    const cols = Array.from(colSet);
+    if (cols.includes('id')) {
+      cols.splice(cols.indexOf('id'), 1);
+      cols.unshift('id');
+    }
+
+    sections.push(`\n=== ONEVAULT_${collectionKey.toUpperCase()} ===`);
+    sections.push(cols.map(esc).join(','));
+
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const values = cols.map((col) => esc(row[col]));
+      sections.push(values.join(','));
+    }
   }
 
-  // Section 2: Note Folders
-  sections.push('\n=== ONEVAULT_NOTE_FOLDERS ===');
-  sections.push(['id', 'name', 'color', 'icon', 'created_at'].map(esc).join(','));
-  for (const f of data.collections.noteFolders || []) {
-    sections.push([esc(f.id), esc(f.name), esc(f.color), esc(f.icon), esc(f.created_at)].join(','));
-  }
-
-  // Section 3: Two Factor Tokens
-  sections.push('\n=== ONEVAULT_TWO_FACTOR ===');
-  sections.push(['id', 'issuer', 'label', 'secret', 'algorithm', 'digits', 'period', 'created_at'].map(esc).join(','));
-  for (const t of data.collections.twoFactorTokens || []) {
-    sections.push([
-      esc(t.id),
-      esc(t.issuer),
-      esc(t.label),
-      esc(t.secret),
-      esc(t.algorithm),
-      esc(t.digits),
-      esc(t.period),
-      esc(t.created_at),
-    ].join(','));
-  }
-
-  // Section 4: Mail Accounts
-  sections.push('\n=== ONEVAULT_MAIL_ACCOUNTS ===');
-  sections.push(['id', 'email', 'forward_to', 'note', 'created_at'].map(esc).join(','));
-  for (const a of data.collections.mailAccounts || []) {
-    sections.push([esc(a.id), esc(a.email), esc(a.forward_to), esc(a.note), esc(a.created_at)].join(','));
-  }
-
-  return sections.join('\n');
+  return sections.join('\n').trim();
 }
 
-export function parseCsvToVault(csvText: string): VaultExportData {
+/**
+ * Universal Dynamic CSV Parser.
+ * Maps header rows to object keys for any collection automatically.
+ */
+export function parseCsvToVault(csvText: string): VaultValidationResult {
   const lines = csvText.split(/\r?\n/);
-  let currentSection = '';
-
-  const notes: any[] = [];
-  const noteFolders: any[] = [];
-  const twoFactorTokens: any[] = [];
-  const mailAccounts: any[] = [];
+  const collections: Record<string, any[]> = {};
 
   function parseCsvRow(row: string): string[] {
     const result: string[] = [];
@@ -272,73 +352,70 @@ export function parseCsvToVault(csvText: string): VaultExportData {
     return result;
   }
 
-  let isHeader = false;
+  // Map upper-case section names to canonical camelCase collection keys
+  const sectionKeyMap: Record<string, string> = {
+    notes: 'notes',
+    notefolders: 'noteFolders',
+    note_folders: 'noteFolders',
+    twofactor: 'twoFactorTokens',
+    twofactortokens: 'twoFactorTokens',
+    two_factor: 'twoFactorTokens',
+    two_factor_tokens: 'twoFactorTokens',
+    mailaccounts: 'mailAccounts',
+    mail_accounts: 'mailAccounts',
+    mailsubdomains: 'mailSubdomains',
+    mail_subdomains: 'mailSubdomains',
+    mailmessages: 'mailMessages',
+    mail_messages: 'mailMessages',
+    customdomains: 'customDomains',
+    custom_domains: 'customDomains',
+    domaindnsrecords: 'domainDnsRecords',
+    domain_dns_records: 'domainDnsRecords',
+    passkeys: 'passkeys',
+  };
+
+  let currentKey = '';
+  let currentHeaders: string[] = [];
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
     if (trimmed.startsWith('=== ONEVAULT_')) {
-      currentSection = trimmed;
-      isHeader = true;
+      const rawName = trimmed
+        .replace(/^===\s*ONEVAULT_|\s*===$/gi, '')
+        .trim()
+        .toLowerCase();
+      currentKey = sectionKeyMap[rawName] || rawName;
+      if (!collections[currentKey]) {
+        collections[currentKey] = [];
+      }
+      currentHeaders = [];
       continue;
     }
 
-    if (isHeader) {
-      isHeader = false;
-      continue;
-    }
-
-    const cols = parseCsvRow(line);
-
-    if (currentSection === '=== ONEVAULT_NOTES ===' && cols.length >= 3) {
-      notes.push({
-        id: cols[0],
-        title: cols[1],
-        content: cols[2],
-        folder_id: cols[3] || null,
-        is_pinned: cols[4] === '1' || cols[4] === 'true' ? 1 : 0,
-        tags: cols[5] || '[]',
-        created_at: cols[6] || new Date().toISOString(),
-        updated_at: cols[7] || new Date().toISOString(),
-      });
-    } else if (currentSection === '=== ONEVAULT_NOTE_FOLDERS ===' && cols.length >= 2) {
-      noteFolders.push({
-        id: cols[0],
-        name: cols[1],
-        color: cols[2] || 'purple',
-        icon: cols[3] || null,
-        created_at: cols[4] || new Date().toISOString(),
-      });
-    } else if (currentSection === '=== ONEVAULT_TWO_FACTOR ===' && cols.length >= 4) {
-      twoFactorTokens.push({
-        id: cols[0],
-        issuer: cols[1],
-        label: cols[2],
-        secret: cols[3],
-        algorithm: cols[4] || 'SHA1',
-        digits: Number(cols[5]) || 6,
-        period: Number(cols[6]) || 30,
-        created_at: cols[7] || new Date().toISOString(),
-      });
-    } else if (currentSection === '=== ONEVAULT_MAIL_ACCOUNTS ===' && cols.length >= 2) {
-      mailAccounts.push({
-        id: cols[0],
-        email: cols[1],
-        forward_to: cols[2] || null,
-        note: cols[3] || null,
-        created_at: cols[4] || new Date().toISOString(),
-      });
+    if (currentKey) {
+      const cols = parseCsvRow(line);
+      if (currentHeaders.length === 0) {
+        currentHeaders = cols.map((c) => c.trim());
+      } else {
+        const rowObj: Record<string, any> = {};
+        for (let i = 0; i < currentHeaders.length; i++) {
+          const colName = currentHeaders[i];
+          if (!colName) continue;
+          let val: any = cols[i] ?? '';
+          if (val === 'null') val = null;
+          rowObj[colName] = val;
+        }
+        collections[currentKey].push(rowObj);
+      }
     }
   }
 
   return validateVaultStructure({
-    collections: {
-      notes,
-      noteFolders,
-      twoFactorTokens,
-      mailAccounts,
-      mailSubdomains: [],
-      mailMessages: [],
-    },
+    version: 2,
+    app: 'OneVault',
+    exportedAt: new Date().toISOString(),
+    collections,
   });
 }

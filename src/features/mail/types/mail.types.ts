@@ -63,3 +63,6 @@ export interface MailFolderInfo {
   isRoot: boolean;
   totalEmails: number;
 }
+
+export type ServiceBadgeStyle = 'icon' | 'both' | 'name';
+

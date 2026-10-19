@@ -9,6 +9,8 @@ import {
   ChatText,
   ArrowsClockwise,
   CheckCircle,
+  Globe,
+  Fingerprint,
 } from '@phosphor-icons/react';
 import { settingsService } from '../services/settings.service';
 import type { VaultStats } from '../types/settings.types';
@@ -83,52 +85,76 @@ export const BackupImportTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Real-time Storage Inventory Pill Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-3">
+      {/* Real-time Storage Inventory Pill Grid (Responsive Mobile 2-col, Tablet 3-col, Desktop 6-col) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-500 border border-purple-500/20">
             <NotePencil size={18} weight="duotone" />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-mono text-fg-muted uppercase">Notes &amp; Folders</div>
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Notes &amp; Folders</div>
             <div className="text-sm font-bold font-mono text-fg-primary">
               {(stats?.notes ?? 0) + (stats?.noteFolders ?? 0)}
             </div>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-3">
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
             <Key size={18} weight="duotone" />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-mono text-fg-muted uppercase">2FA Authenticators</div>
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">2FA Tokens</div>
             <div className="text-sm font-bold font-mono text-fg-primary">
               {stats?.twoFactorTokens ?? 0}
             </div>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-3">
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20">
             <EnvelopeSimple size={18} weight="duotone" />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-mono text-fg-muted uppercase">Mail Accounts</div>
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Mail Accounts</div>
             <div className="text-sm font-bold font-mono text-fg-primary">
               {stats?.mailAccounts ?? 0}
             </div>
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-3">
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
             <ChatText size={18} weight="duotone" />
           </div>
           <div className="min-w-0">
-            <div className="text-[10px] font-mono text-fg-muted uppercase">Inbound Messages</div>
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Inbound Mail</div>
             <div className="text-sm font-bold font-mono text-fg-primary">
               {stats?.mailMessages ?? 0}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            <Globe size={18} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Domains &amp; DNS</div>
+            <div className="text-sm font-bold font-mono text-fg-primary">
+              {(stats?.customDomains ?? 0) + (stats?.domainDnsRecords ?? 0) + (stats?.mailSubdomains ?? 0)}
+            </div>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-surface-solid border border-default shadow-xs flex items-center gap-2.5 sm:gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500 border border-rose-500/20">
+            <Fingerprint size={18} weight="duotone" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Passkeys</div>
+            <div className="text-sm font-bold font-mono text-fg-primary">
+              {stats?.passkeys ?? 0}
             </div>
           </div>
         </div>

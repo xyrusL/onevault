@@ -4,6 +4,7 @@ import { BaseModal } from '../../shared/components/modals';
 import { CreateTwoFactorModalContent } from './components/CreateTwoFactorModalContent';
 import { TwoFactorDetailsModalContent } from './components/TwoFactorDetailsModalContent';
 import { TwoFactorHeader } from './components/TwoFactorHeader';
+import { TwoFactorIssuerIcon } from './components/TwoFactorIssuerIcon';
 import { TwoFactorTokenList } from './components/TwoFactorTokenList';
 import { twoFactorService } from './services/two-factor.service';
 import {
@@ -119,7 +120,13 @@ export const TwoFactorView: React.FC = () => {
         onClose={() => setSelectedToken(null)}
         title={selectedToken ? `${selectedToken.issuer} 2FA` : '2FA Details'}
         subtitle={selectedToken?.label}
-        icon={<Key size={15} weight="duotone" />}
+        icon={
+          selectedToken ? (
+            <TwoFactorIssuerIcon issuer={selectedToken.issuer} size="sm" />
+          ) : (
+            <Key size={15} weight="duotone" />
+          )
+        }
       >
         {selectedToken && (
           <TwoFactorDetailsModalContent

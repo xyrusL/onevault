@@ -23,6 +23,7 @@ import { MailHeader } from './components/MailHeader';
 import { MailInboxModalContent } from './components/MailInboxModalContent';
 import { MailNotePadModalContent } from './components/MailNotePadModalContent';
 import { MailAccountActivityModalContent } from './components/service-activity';
+import { ServiceBadgeStyleProvider } from './context/ServiceBadgeStyleContext';
 import { mailInboxService } from './services/mail-inbox.service';
 import { mailService } from './services/mail.service';
 import { MailActivityItem } from './types/mail-inbox.types';
@@ -356,7 +357,8 @@ export const MailView: React.FC = () => {
   }, []);
 
   return (
-    <section className="flex-1 flex flex-col gap-3.5">
+    <ServiceBadgeStyleProvider>
+      <section className="flex-1 flex flex-col gap-3.5">
       {/* Top Header: Title, View Switcher (All vs Folders vs Activity), Search Bar, and Actions */}
       <MailHeader
         viewMode={viewMode}
@@ -637,5 +639,6 @@ export const MailView: React.FC = () => {
         )}
       </BaseModal>
     </section>
-  );
+  </ServiceBadgeStyleProvider>
+);
 };

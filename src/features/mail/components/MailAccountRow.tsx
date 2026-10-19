@@ -16,6 +16,7 @@ import {
 } from '../types/mail.types';
 import { MailServiceTagBadge } from './service-activity';
 import { resolveSubdomainTheme, SubdomainIcon } from './SubdomainIcon';
+import { useServiceBadgeStyle } from '../context/ServiceBadgeStyleContext';
 
 interface MailAccountRowProps {
   item: MailAccountItem;
@@ -34,6 +35,7 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
   onOpenActivity,
   onOpenNote,
 }) => {
+  const { badgeStyle } = useServiceBadgeStyle();
   const [copied, setCopied] = useState(false);
   const isVault = isVaultDestination(item.forwardTo);
   const isRootDomain = item.domain.split('.').length <= 2;
@@ -87,15 +89,49 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
             {/* Service Tags on Mobile */}
             {summary && summary.tags.length > 0 && (
               <div className="flex items-center gap-1 shrink-0">
-                <MailServiceTagBadge
-                  tag={summary.tags[0]}
-                  size="sm"
-                  onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
-                />
-                {summary.tags.length > 1 && (
-                  <span className="rounded px-1 py-0 text-[9px] font-mono font-semibold bg-elevated border border-default text-fg-secondary">
-                    +{summary.tags.length - 1}
-                  </span>
+                {badgeStyle === 'icon' ? (
+                  <>
+                    {summary.tags.slice(0, 2).map((tag) => (
+                      <MailServiceTagBadge
+                        key={tag.name}
+                        tag={tag}
+                        size="sm"
+                        onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
+                      />
+                    ))}
+                    {summary.tags.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenActivity ? onOpenActivity(item) : onSelect(item);
+                        }}
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-full text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary cursor-pointer transition-colors"
+                      >
+                        +{summary.tags.length - 2}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <MailServiceTagBadge
+                      tag={summary.tags[0]}
+                      size="sm"
+                      onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
+                    />
+                    {summary.tags.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenActivity ? onOpenActivity(item) : onSelect(item);
+                        }}
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-md text-[9px] font-mono font-semibold bg-elevated border border-default text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors"
+                      >
+                        +{summary.tags.length - 1}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -243,26 +279,57 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
             {/* Generated Service Tag Badges */}
             {summary && summary.tags.length > 0 && (
               <div className="flex items-center gap-1 shrink-0 ml-1">
-                <MailServiceTagBadge
-                  tag={summary.tags[0]}
-                  size="sm"
-                  onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
-                />
-                {summary.tags.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenActivity ? onOpenActivity(item) : onSelect(item);
-                    }}
-                    title={`+${summary.tags.length - 1} more detected services: ${summary.tags
-                      .slice(1)
-                      .map((t) => t.name)
-                      .join(', ')}`}
-                    className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold bg-elevated border border-default text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors"
-                  >
-                    +{summary.tags.length - 1}
-                  </button>
+                {badgeStyle === 'icon' ? (
+                  <>
+                    {summary.tags.slice(0, 2).map((tag) => (
+                      <MailServiceTagBadge
+                        key={tag.name}
+                        tag={tag}
+                        size="sm"
+                        onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
+                      />
+                    ))}
+                    {summary.tags.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenActivity ? onOpenActivity(item) : onSelect(item);
+                        }}
+                        title={`+${summary.tags.length - 2} more detected services: ${summary.tags
+                          .slice(2)
+                          .map((t) => t.displayName)
+                          .join(', ')}`}
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-full text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary hover:border-default cursor-pointer transition-colors"
+                      >
+                        +{summary.tags.length - 2}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <MailServiceTagBadge
+                      tag={summary.tags[0]}
+                      size="sm"
+                      onClick={() => (onOpenActivity ? onOpenActivity(item) : onSelect(item))}
+                    />
+                    {summary.tags.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenActivity ? onOpenActivity(item) : onSelect(item);
+                        }}
+                        title={`+${summary.tags.length - 1} more detected services: ${summary.tags
+                          .slice(1)
+                          .map((t) => t.displayName)
+                          .join(', ')}`}
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-md text-[10px] font-mono font-semibold bg-elevated border border-default text-fg-secondary hover:text-fg-primary cursor-pointer transition-colors"
+                      >
+                        +{summary.tags.length - 1}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

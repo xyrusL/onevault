@@ -25,7 +25,11 @@ Keep code clean, modular, and consistent. Follow these core guidelines:
 - Routes in `worker/src/routes/`, business logic in `worker/src/services/`, D1 migrations in `worker/migrations/`.
 - Frontend calls the Worker only via `src/shared/services/api-client.service.ts`.
 
-## 5. Need More Context? Check `docs/`
+## 5. Stealth & Privacy Security (Zero Information Leakage)
+- **Silent Threat Defense**: Threat detection, rate limiting, and honeypot guards must run silently in the background. Never expose telemetry badges, risk scores, rule names, or "typo cushions" on user-facing pages.
+- **Neutral 404 Error Wording**: Never use wording like "restricted URL", "protected endpoint", or "admin portal" on public error pages. Always use neutral wording like "broken link" or "page does not exist" so outsiders cannot deduce what private tools exist.
+
+## 6. Need More Context? Check `docs/`
 If you need in-depth architectural details, diagrams, or API specifications, check the documentation hub:
 - [**`docs/README.md`**](./docs/README.md) — Documentation index
 - [**`docs/ARCHITECTURE.md`**](./docs/ARCHITECTURE.md) — Directory map & architecture overview

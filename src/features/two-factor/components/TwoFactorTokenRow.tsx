@@ -4,72 +4,16 @@ import {
   Check,
   Copy,
   Key,
-  ShieldCheck,
 } from '@phosphor-icons/react';
 import { twoFactorService } from '../services/two-factor.service';
 import { TwoFactorTokenItem } from '../types/two-factor.types';
+import { resolveIssuerTheme } from '../utils/two-factor-icon.utils';
+import { TwoFactorIssuerIcon } from './TwoFactorIssuerIcon';
 
 interface TwoFactorTokenRowProps {
   item: TwoFactorTokenItem;
   nowMs: number;
   onSelect: (item: TwoFactorTokenItem) => void;
-}
-
-interface IssuerTheme {
-  bg: string;
-  border: string;
-  text: string;
-}
-
-function resolveIssuerTheme(issuer: string): IssuerTheme {
-  const low = issuer.toLowerCase();
-  if (low.includes('cloud')) {
-    return {
-      bg: 'bg-orange-500/10',
-      border: 'border-orange-500/25',
-      text: 'text-orange-400',
-    };
-  }
-  if (low.includes('git')) {
-    return {
-      bg: 'bg-violet-500/10',
-      border: 'border-violet-500/25',
-      text: 'text-violet-400',
-    };
-  }
-  if (low.includes('goog')) {
-    return {
-      bg: 'bg-blue-500/10',
-      border: 'border-blue-500/25',
-      text: 'text-blue-400',
-    };
-  }
-  if (low.includes('disc') || low.includes('slack')) {
-    return {
-      bg: 'bg-indigo-500/10',
-      border: 'border-indigo-500/25',
-      text: 'text-indigo-400',
-    };
-  }
-  if (low.includes('micro') || low.includes('azure')) {
-    return {
-      bg: 'bg-cyan-500/10',
-      border: 'border-cyan-500/25',
-      text: 'text-cyan-400',
-    };
-  }
-  if (low.includes('aws') || low.includes('amazon')) {
-    return {
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/25',
-      text: 'text-amber-400',
-    };
-  }
-  return {
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-500/25',
-    text: 'text-indigo-400',
-  };
 }
 
 export const TwoFactorTokenRow: React.FC<TwoFactorTokenRowProps> = ({
@@ -118,9 +62,9 @@ export const TwoFactorTokenRow: React.FC<TwoFactorTokenRowProps> = ({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-transform group-hover:scale-105 ${theme.bg} ${theme.border} ${theme.text}`}
+              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-transform group-hover:scale-105 p-1 ${theme.bg} ${theme.border} ${theme.text}`}
             >
-              <ShieldCheck size={15} weight="duotone" />
+              <TwoFactorIssuerIcon issuer={item.issuer} size="sm" />
             </div>
             <span className="font-display text-sm font-semibold text-fg-primary truncate leading-tight">
               {item.issuer}
@@ -220,9 +164,9 @@ export const TwoFactorTokenRow: React.FC<TwoFactorTokenRowProps> = ({
         {/* Column 1: Service Issuer & Account Label */}
         <div className="col-span-6 flex items-center gap-2.5 min-w-0">
           <div
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-transform group-hover:scale-105 ${theme.bg} ${theme.border} ${theme.text}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-transform group-hover:scale-105 p-1.5 ${theme.bg} ${theme.border} ${theme.text}`}
           >
-            <ShieldCheck size={16} weight="duotone" />
+            <TwoFactorIssuerIcon issuer={item.issuer} size="md" />
           </div>
 
           <div className="min-w-0 flex-1">

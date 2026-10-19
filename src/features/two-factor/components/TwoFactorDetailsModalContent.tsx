@@ -10,6 +10,8 @@ import {
 } from '@phosphor-icons/react';
 import { twoFactorService } from '../services/two-factor.service';
 import { TwoFactorTokenItem } from '../types/two-factor.types';
+import { resolveIssuerTheme } from '../utils/two-factor-icon.utils';
+import { TwoFactorIssuerIcon } from './TwoFactorIssuerIcon';
 
 interface TwoFactorDetailsModalContentProps {
   token: TwoFactorTokenItem;
@@ -24,6 +26,7 @@ export const TwoFactorDetailsModalContent: React.FC<
   const [copiedField, setCopiedField] = useState<'code' | 'uri' | null>(null);
 
   const live = twoFactorService.generateLiveCode(token, nowMs);
+  const theme = resolveIssuerTheme(token.issuer);
 
   const handleCopy = (text: string, field: 'code' | 'uri') => {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -36,12 +39,21 @@ export const TwoFactorDetailsModalContent: React.FC<
       {/* Live TOTP Summary Card */}
       <div className="rounded-lg bg-elevated border border-default p-3 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-fg-muted leading-none">
-            Account Label
-          </span>
-          <span className="font-mono text-xs font-semibold text-fg-primary leading-none truncate">
-            {token.label}
-          </span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border p-1.5 ${theme.bg} ${theme.border} ${theme.text}`}
+            >
+              <TwoFactorIssuerIcon issuer={token.issuer} size="md" />
+            </div>
+            <div className="min-w-0">
+              <span className="font-display text-sm font-semibold text-fg-primary leading-none truncate block">
+                {token.issuer}
+              </span>
+              <span className="font-mono text-xs text-fg-muted truncate block mt-1">
+                {token.label}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t border-subtle pt-2.5">

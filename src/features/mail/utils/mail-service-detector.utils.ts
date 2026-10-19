@@ -300,15 +300,29 @@ export function detectServiceFromActivity(activity: MailActivityItem): DetectedS
 /**
  * Checks an account's note field dynamically if no incoming emails have arrived yet.
  * E.g. note = "github account" -> infers "GitHub".
+ * Avoids inferring if the note just contains personal names, the localPart alias, or generic words.
  */
 export function inferServiceFromAccountNote(account: MailAccountItem): DetectedServiceTag | null {
   const note = (account.note || '').trim();
   if (!note) return null;
 
-  // Extract first significant brand word from note (excluding "account", "login", "for", "email", etc.)
-  const cleanNote = note.replace(/\b(?:account|login|email|signup|test|vault|personal|work)\b/gi, '').trim();
+  // Extract first significant brand word from note (excluding common generic descriptor words)
+  const cleanNote = note
+    .replace(
+      /\b(?:account|login|email|signup|test|vault|personal|work|main|primary|secondary|backup|temp|temporary|spam|misc|dev|alias|user|admin|custom|service|my|for|me|the|app|site|pass|password)\b/gi,
+      ''
+    )
+    .trim();
   const words = cleanNote.split(/[\s,.-]+/).filter((w) => w.length >= 2);
   if (words.length === 0) return null;
+
+  // If the word matches the account's localPart (e.g. alias "xyrus" and note "xyrus"),
+  // it's the user's name/alias, not an external service!
+  const localPartClean = (account.localPart || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const candidateWord = words[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (candidateWord && candidateWord === localPartClean) {
+    return null;
+  }
 
   const candidate = toBrandTitle(words[0]);
   if (!candidate || candidate.length < 2) return null;
@@ -427,7 +441,20 @@ export function buildServiceDetectionMap(
   // 3. Determine primaryTag for each summary
   const allUniqueTagsMap = new Map<string, DetectedServiceTag>();
 
-  for (const summary of byAccountId.values()) {
+  const allSummaries = Array.from(new Set([...byAccountId.values(), ...byEmail.values()]));
+
+  for (const summary of allSummaries) {
+    // If real incoming emails have arrived or verified service tags are detected,
+    // prune phantom 0-match inferred note tags so they don't pollute the tag list
+    const hasLiveTags = summary.tags.some(
+      (t) => t.confidence === 'verified' || t.matchedCount > 0
+    );
+    if (hasLiveTags) {
+      summary.tags = summary.tags.filter(
+        (t) => t.confidence !== 'inferred' || t.matchedCount > 0
+      );
+    }
+
     summary.tags.sort((a, b) => {
       if (a.confidence === 'verified' && b.confidence !== 'verified') return -1;
       if (b.confidence === 'verified' && a.confidence !== 'verified') return 1;

@@ -1,5 +1,4 @@
-import React, { useMemo } from 'react';
-import { ShieldCheck, ShieldWarning } from '@phosphor-icons/react';
+import React, { useEffect } from 'react';
 import { authService } from '../auth';
 import { ThemeControlPill } from '../../shared/components/theme-controls/ThemeControlPill';
 import { routeThreatGuardService } from '../../shared/services/route-threat-guard.service';
@@ -14,18 +13,14 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onGoHome }) => {
   const { mode } = useTheme();
   const isDark = mode === 'dark';
 
-  const probeDecision = useMemo(() => {
+  // Silently record route probes in the background without exposing telemetry to visitors
+  useEffect(() => {
     const hasSession = Boolean(authService.getSession());
-    return routeThreatGuardService.recordUnknownRouteProbe(
+    routeThreatGuardService.recordUnknownRouteProbe(
       window.location.pathname,
       hasSession
     );
   }, []);
-
-  const isInterceptedScanner =
-    probeDecision.action === 'PENETRATION_BLOCK' ||
-    probeDecision.action === 'TEMP_QUARANTINE' ||
-    probeDecision.action === 'RATE_LIMITED';
 
   const handleGoHome = () => {
     routeThreatGuardService.clearClientProbeState();
@@ -51,11 +46,7 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onGoHome }) => {
           {/* Subtle glowing ambient aura pulsing with electric sparks */}
           <div
             className={`absolute w-52 h-24 rounded-full blur-2xl pointer-events-none transition-all duration-300 animate-pulse ${
-              isInterceptedScanner
-                ? 'bg-rose-500/25'
-                : isDark
-                  ? 'bg-cyan-400/25'
-                  : 'bg-sky-400/15'
+              isDark ? 'bg-cyan-400/25' : 'bg-sky-400/15'
             }`}
             style={{ animationDuration: '2.2s' }}
           />
@@ -69,49 +60,20 @@ export const NotFoundPage: React.FC<NotFoundPageProps> = ({ onGoHome }) => {
         {/* 404 Headline with grounded shadow line */}
         <div className="relative inline-flex flex-col items-center">
           <h1 className="font-display text-5xl sm:text-6xl font-black tracking-wider text-fg-primary leading-none">
-            {probeDecision.action === 'PENETRATION_BLOCK' ||
-            probeDecision.action === 'TEMP_QUARANTINE'
-              ? '403'
-              : probeDecision.action === 'RATE_LIMITED'
-                ? '429'
-                : '404'}
+            404
           </h1>
           <div className="w-14 h-1.5 bg-fg-primary/20 rounded-full blur-[1px] mt-1.5" />
         </div>
 
         {/* Subtitle */}
         <h2 className="font-display text-xl sm:text-2xl font-bold text-fg-primary mt-4 tracking-tight">
-          {isInterceptedScanner
-            ? 'Adaptive Threat Guard — Route Scan Intercepted'
-            : 'Oops!, Page not Found'}
+          Oops!, Page not Found
         </h2>
 
-        {/* Description text */}
+        {/* Description text - generic broken link message with zero clues about restricted or internal routes */}
         <p className="mt-3 text-xs sm:text-sm text-fg-secondary max-w-md mx-auto leading-relaxed">
-          {isInterceptedScanner
-            ? `OneVault's Behavioral IPS detected unusual route probing on "${probeDecision.pathname}" (${probeDecision.detectionVector}). Only this session is throttled/quarantined while normal site operations remain 100% unaffected.`
-            : 'The link you followed may be broken, or the URL address is restricted. Please check the address or return to the main dashboard.'}
+          The link you followed may be broken or does not exist. Please check the address or return to the main dashboard.
         </p>
-
-        {/* Adaptive Threat Guard Telemetry Pill */}
-        <div
-          className={`mt-4 inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[11px] font-mono ${
-            isInterceptedScanner
-              ? 'border-rose-500/35 bg-rose-500/10 text-rose-400'
-              : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-          }`}
-        >
-          {isInterceptedScanner ? (
-            <ShieldWarning size={14} weight="fill" className="shrink-0" />
-          ) : (
-            <ShieldCheck size={14} weight="fill" className="shrink-0" />
-          )}
-          <span>
-            {isInterceptedScanner
-              ? `Threat Guard Action: ${probeDecision.action} · Risk Score: ${probeDecision.riskScore}/100`
-              : `Typo Tolerance: ${probeDecision.detectionVector} · 0 Penalty`}
-          </span>
-        </div>
 
         {/* Clean pill button matching reference layout */}
         <button

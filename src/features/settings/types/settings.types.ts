@@ -19,13 +19,17 @@ export interface UpdateAccountResponse {
 }
 
 export interface VaultStats {
-  mailAccounts: number;
-  mailSubdomains: number;
-  mailMessages: number;
-  twoFactorTokens: number;
-  noteFolders: number;
-  notes: number;
+  notes?: number;
+  noteFolders?: number;
+  twoFactorTokens?: number;
+  mailAccounts?: number;
+  mailSubdomains?: number;
+  mailMessages?: number;
+  customDomains?: number;
+  domainDnsRecords?: number;
+  passkeys?: number;
   total: number;
+  [key: string]: number | undefined;
 }
 
 export type BackupFormat = 'ovault' | 'json' | 'csv';
@@ -41,14 +45,7 @@ export interface ImportSummary {
   updated: number;
   skipped: number;
   totalProcessed: number;
-  breakdown: {
-    notes: CollectionStats;
-    noteFolders: CollectionStats;
-    twoFactorTokens: CollectionStats;
-    mailAccounts: CollectionStats;
-    mailMessages: CollectionStats;
-    mailSubdomains: CollectionStats;
-  };
+  breakdown: Record<string, CollectionStats>;
 }
 
 export interface VaultExportData {
@@ -57,12 +54,13 @@ export interface VaultExportData {
   exportedAt: string;
   hostname?: string;
   counts: VaultStats;
-  collections: {
-    mailAccounts: any[];
-    mailSubdomains: any[];
-    mailMessages: any[];
-    twoFactorTokens: any[];
-    noteFolders: any[];
-    notes: any[];
-  };
+  collections: Record<string, any[]>;
+}
+
+export interface ValidationDiagnostics {
+  isValid: boolean;
+  totalRecords: number;
+  collectionCounts: Record<string, number>;
+  warnings: string[];
+  errors: string[];
 }

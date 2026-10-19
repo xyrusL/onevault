@@ -1,16 +1,19 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   CloudCheck,
   Database,
   FolderPlus,
   FolderSimple,
+  Gear,
   ListBullets,
   MagnifyingGlass,
   Plus,
   Pulse,
   X,
 } from '@phosphor-icons/react';
-import { MailViewMode } from '../types/mail.types';
+import { useServiceBadgeStyle } from '../context/ServiceBadgeStyleContext';
+import { MailViewMode, ServiceBadgeStyle } from '../types/mail.types';
 
 interface MailHeaderProps {
   viewMode: MailViewMode;
@@ -25,6 +28,12 @@ interface MailHeaderProps {
   unreadActivityCount: number;
 }
 
+const BADGE_STYLE_OPTIONS: Array<{ value: ServiceBadgeStyle; label: string }> = [
+  { value: 'icon', label: 'Icon Only' },
+  { value: 'both', label: 'Icon & Name' },
+  { value: 'name', label: 'Name Only' },
+];
+
 export const MailHeader: React.FC<MailHeaderProps> = ({
   viewMode,
   onViewModeChange,
@@ -37,7 +46,22 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
   totalActivityCount,
   unreadActivityCount,
 }) => {
+  const { badgeStyle, setBadgeStyle } = useServiceBadgeStyle();
+  const [isBadgeMenuOpen, setIsBadgeMenuOpen] = useState(false);
+  const badgeMenuRef = useRef<HTMLDivElement>(null);
+
   const hasUnreadActivity = unreadActivityCount > 0;
+
+  useEffect(() => {
+    if (!isBadgeMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (badgeMenuRef.current && !badgeMenuRef.current.contains(e.target as Node)) {
+        setIsBadgeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isBadgeMenuOpen]);
 
   return (
     <header className="flex flex-col gap-3">
@@ -197,33 +221,89 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
           </button>
         </div>
 
-        {/* Search Email Input */}
-        <div className="relative flex items-center w-full sm:w-72">
-          <span className="pointer-events-none absolute left-3 inline-flex items-center justify-center text-sky-400/80">
-            <MagnifyingGlass size={14} weight="bold" />
-          </span>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={
-              viewMode === 'activity'
-                ? 'Search sender, subject, alias...'
-                : 'Search email | note...'
-            }
-            aria-label="Search email addresses"
-            className="w-full rounded-lg bg-surface hover:bg-elevated focus:bg-surface-solid pl-8 pr-7 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-sky-500/50 focus:outline-none transition-colors"
-          />
-          {searchQuery && (
+        {/* Right side controls: Search Email Input + Service Badge Display Style Gear */}
+        <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          {/* Search Email Input */}
+          <div className="relative flex items-center flex-1 sm:w-72">
+            <span className="pointer-events-none absolute left-3 inline-flex items-center justify-center text-sky-400/80">
+              <MagnifyingGlass size={14} weight="bold" />
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={
+                viewMode === 'activity'
+                  ? 'Search sender, subject, alias...'
+                  : 'Search email | note...'
+              }
+              aria-label="Search email addresses"
+              className="w-full rounded-lg bg-surface hover:bg-elevated focus:bg-surface-solid pl-8 pr-7 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-sky-500/50 focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                title="Clear search"
+                className="absolute right-2 inline-flex h-4 w-4 items-center justify-center rounded text-fg-muted hover:text-fg-primary cursor-pointer"
+              >
+                <X size={12} weight="bold" />
+              </button>
+            )}
+          </div>
+
+          {/* Service Tag Badge Display Setting (Gear Popover) */}
+          <div className="relative shrink-0" ref={badgeMenuRef}>
             <button
               type="button"
-              onClick={() => onSearchChange('')}
-              title="Clear search"
-              className="absolute right-2 inline-flex h-4 w-4 items-center justify-center rounded text-fg-muted hover:text-fg-primary cursor-pointer"
+              onClick={() => setIsBadgeMenuOpen(!isBadgeMenuOpen)}
+              title="Service badge display settings"
+              aria-label="Service badge display settings"
+              aria-expanded={isBadgeMenuOpen}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all cursor-pointer ${
+                isBadgeMenuOpen
+                  ? 'bg-elevated border-sky-500/50 text-sky-400 shadow-xs'
+                  : 'bg-surface hover:bg-elevated border-default text-fg-secondary hover:text-fg-primary'
+              }`}
             >
-              <X size={12} weight="bold" />
+              <Gear
+                size={15}
+                weight={isBadgeMenuOpen ? 'fill' : 'bold'}
+                className={`transition-transform duration-150 ${isBadgeMenuOpen ? 'rotate-45 text-sky-400' : ''}`}
+              />
             </button>
-          )}
+
+            {isBadgeMenuOpen && (
+              <div className="absolute right-0 mt-1.5 w-44 rounded-xl border border-default bg-surface-solid/95 backdrop-blur-md p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                  Service Badges
+                </div>
+                {BADGE_STYLE_OPTIONS.map((opt) => {
+                  const isSelected = badgeStyle === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setBadgeStyle(opt.value);
+                        setIsBadgeMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                        isSelected
+                          ? 'bg-sky-500/10 text-sky-400 font-semibold'
+                          : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                      }`}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && (
+                        <Check size={13} weight="bold" className="text-sky-400 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
