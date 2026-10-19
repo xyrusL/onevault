@@ -12,6 +12,7 @@ export interface MailAccountItem {
   /** `NO_FORWARD` when not forwarding */
   forwardTo: string;
   note: string;
+  createdAt: string;
   createdDate: string;
   createdTime: string;
 }
@@ -65,4 +66,6 @@ export interface MailFolderInfo {
 }
 
 export type ServiceBadgeStyle = 'icon' | 'both' | 'name';
+
+export type MailSortOrder = 'newest' | 'oldest' | 'email-asc' | 'email-desc';
 

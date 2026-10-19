@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowsDownUp,
   Check,
   CloudCheck,
   Database,
@@ -13,7 +14,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { useServiceBadgeStyle } from '../context/ServiceBadgeStyleContext';
-import { MailViewMode, ServiceBadgeStyle } from '../types/mail.types';
+import { MailSortOrder, MailViewMode, ServiceBadgeStyle } from '../types/mail.types';
 
 interface MailHeaderProps {
   viewMode: MailViewMode;
@@ -26,12 +27,21 @@ interface MailHeaderProps {
   totalFoldersCount: number;
   totalActivityCount: number;
   unreadActivityCount: number;
+  sortOrder?: MailSortOrder;
+  onSortOrderChange?: (order: MailSortOrder) => void;
 }
 
 const BADGE_STYLE_OPTIONS: Array<{ value: ServiceBadgeStyle; label: string }> = [
   { value: 'icon', label: 'Icon Only' },
   { value: 'both', label: 'Icon & Name' },
   { value: 'name', label: 'Name Only' },
+];
+
+const SORT_OPTIONS: Array<{ value: MailSortOrder; label: string }> = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'oldest', label: 'Oldest First' },
+  { value: 'email-asc', label: 'Email (A → Z)' },
+  { value: 'email-desc', label: 'Email (Z → A)' },
 ];
 
 export const MailHeader: React.FC<MailHeaderProps> = ({
@@ -45,23 +55,32 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
   totalFoldersCount,
   totalActivityCount,
   unreadActivityCount,
+  sortOrder = 'newest',
+  onSortOrderChange,
 }) => {
   const { badgeStyle, setBadgeStyle } = useServiceBadgeStyle();
   const [isBadgeMenuOpen, setIsBadgeMenuOpen] = useState(false);
   const badgeMenuRef = useRef<HTMLDivElement>(null);
 
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+
   const hasUnreadActivity = unreadActivityCount > 0;
 
   useEffect(() => {
-    if (!isBadgeMenuOpen) return;
+    if (!isBadgeMenuOpen && !isSortMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (badgeMenuRef.current && !badgeMenuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (badgeMenuRef.current && !badgeMenuRef.current.contains(target)) {
         setIsBadgeMenuOpen(false);
+      }
+      if (sortMenuRef.current && !sortMenuRef.current.contains(target)) {
+        setIsSortMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isBadgeMenuOpen]);
+  }, [isBadgeMenuOpen, isSortMenuOpen]);
 
   return (
     <header className="flex flex-col gap-3">
@@ -251,6 +270,62 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
               </button>
             )}
           </div>
+
+          {/* Mail Account Sort Order (Popover) */}
+          {viewMode !== 'activity' && onSortOrderChange && (
+            <div className="relative shrink-0" ref={sortMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                title={`Sort accounts: ${
+                  SORT_OPTIONS.find((o) => o.value === sortOrder)?.label || 'Newest First'
+                }`}
+                aria-label="Sort accounts"
+                aria-expanded={isSortMenuOpen}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all cursor-pointer ${
+                  isSortMenuOpen || sortOrder !== 'newest'
+                    ? 'bg-elevated border-indigo-500/50 text-indigo-400 shadow-xs'
+                    : 'bg-surface hover:bg-elevated border-default text-fg-secondary hover:text-fg-primary'
+                }`}
+              >
+                <ArrowsDownUp
+                  size={15}
+                  weight={isSortMenuOpen || sortOrder !== 'newest' ? 'bold' : 'regular'}
+                />
+              </button>
+
+              {isSortMenuOpen && (
+                <div className="absolute right-0 mt-1.5 w-44 rounded-xl border border-default bg-surface-solid/95 backdrop-blur-md p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                    Sort Accounts
+                  </div>
+                  {SORT_OPTIONS.map((opt) => {
+                    const isSelected = sortOrder === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => {
+                          onSortOrderChange(opt.value);
+                          setIsSortMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                          isSelected
+                            ? 'bg-indigo-500/10 text-indigo-400 font-semibold'
+                            : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                        }`}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && (
+                          <Check size={13} weight="bold" className="text-indigo-400 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Service Tag Badge Display Setting (Gear Popover) */}
           <div className="relative shrink-0" ref={badgeMenuRef}>

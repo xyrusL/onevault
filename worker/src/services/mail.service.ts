@@ -152,7 +152,8 @@ async function syncWithCloudflare(env: Env): Promise<void> {
         return;
       }
 
-      for (const rule of rules) {
+      for (let i = 0; i < rules.length; i++) {
+        const rule = rules[i];
         const ruleId = rule.id || rule.tag;
         if (!ruleId) continue;
 
@@ -177,31 +178,47 @@ async function syncWithCloudflare(env: Env): Promise<void> {
             ? forwardAction.value[0].trim().toLowerCase()
             : null;
 
+        // Historical base timestamp for pre-existing rules synced from Cloudflare (2024-01-01 + index)
+        // so they never incorrectly jump ahead of actual OneVault-created emails.
+        const importedCreatedAt = new Date(
+          new Date('2024-01-01T00:00:00.000Z').getTime() + i * 1000
+        ).toISOString();
+
         const match = byRuleId.get(ruleId) ?? byEmail.get(email);
         if (match) {
           seenIds.add(match.id);
+          // If this row was an imported rule (note is null) and was mistakenly given a recent sync date,
+          // heal its created_at so old Cloudflare rules do not eclipse new OneVault emails.
+          const isImportedWithoutNote = !match.note;
+          const shouldHealDate =
+            isImportedWithoutNote &&
+            typeof match.created_at === 'string' &&
+            match.created_at.startsWith('2026-10-19');
+          const finalCreatedAt = shouldHealDate ? importedCreatedAt : match.created_at;
+
           if (
             match.routing_rule_id !== ruleId ||
             match.zone_id !== zone.id ||
             match.forward_to !== forwardTo ||
-            match.email !== email
+            match.email !== email ||
+            shouldHealDate
           ) {
             await env.DB.prepare(
               `UPDATE mail_accounts
-               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?
+               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?, created_at = ?
                WHERE id = ?`
             )
-              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, match.id)
+              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, finalCreatedAt, match.id)
               .run();
           }
         } else {
           const newId = crypto.randomUUID();
           seenIds.add(newId);
           await env.DB.prepare(
-            `INSERT INTO mail_accounts (id, local_part, domain, email, zone_id, routing_rule_id, forward_to)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`
+            `INSERT INTO mail_accounts (id, local_part, domain, email, zone_id, routing_rule_id, forward_to, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           )
-            .bind(newId, localPart, domainPart, email, zone.id, ruleId, forwardTo)
+            .bind(newId, localPart, domainPart, email, zone.id, ruleId, forwardTo, importedCreatedAt)
             .run();
         }
       }
@@ -220,7 +237,7 @@ export const mailService = {
   async list(env: Env): Promise<MailAccountDto[]> {
     await syncWithCloudflare(env);
     const { results } = await env.DB.prepare(
-      'SELECT * FROM mail_accounts ORDER BY created_at DESC'
+      'SELECT * FROM mail_accounts ORDER BY created_at DESC, id DESC'
     ).all<MailAccountRecord>();
     return results.map(toDto);
   },

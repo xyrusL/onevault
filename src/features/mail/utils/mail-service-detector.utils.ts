@@ -394,6 +394,7 @@ export function buildServiceDetectionMap(
         email: act.recipientEmail,
         forwardTo: act.forwardTo || 'None',
         note: '',
+        createdAt: new Date().toISOString(),
         createdDate: act.receivedDate,
         createdTime: act.receivedTime,
       };

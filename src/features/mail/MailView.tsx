@@ -39,6 +39,7 @@ import {
   MailAccountItem,
   MailDomain,
   MailFolderInfo,
+  MailSortOrder,
   MailViewMode,
   NO_FORWARD,
   UpdateMailPayload,
@@ -84,6 +85,23 @@ export const MailView: React.FC = () => {
   const [pendingDeleteFolder, setPendingDeleteFolder] =
     useState<MailFolderInfo | null>(null);
 
+  const [sortOrder, setSortOrder] = useState<MailSortOrder>(() => {
+    try {
+      const saved = localStorage.getItem('onevault.mail.sort-order');
+      if (saved === 'oldest' || saved === 'email-asc' || saved === 'email-desc') {
+        return saved;
+      }
+    } catch {}
+    return 'newest';
+  });
+
+  const handleSortOrderChange = (order: MailSortOrder) => {
+    setSortOrder(order);
+    try {
+      localStorage.setItem('onevault.mail.sort-order', order);
+    } catch {}
+  };
+
   // Compute smart service detection map across all accounts & activity items
   const detectionMap = useMemo(() => {
     return buildServiceDetectionMap(accounts, activityItems);
@@ -97,6 +115,23 @@ export const MailView: React.FC = () => {
       accountMatchesSearch(item, detectionMap.byAccountId.get(item.id), q)
     );
   }, [accounts, searchQuery, detectionMap]);
+
+  // Sort accounts deterministically based on active sort order (defaulting to Newest First)
+  const sortedAccounts = useMemo(() => {
+    return [...filteredAccounts].sort((a, b) => {
+      if (sortOrder === 'oldest') {
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+      if (sortOrder === 'email-asc') {
+        return a.email.localeCompare(b.email);
+      }
+      if (sortOrder === 'email-desc') {
+        return b.email.localeCompare(a.email);
+      }
+      // default: newest first
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [filteredAccounts, sortOrder]);
 
   // Global search filtering for activity items
   const filteredActivity = useMemo(() => {
@@ -120,11 +155,11 @@ export const MailView: React.FC = () => {
 
   // Current folder's accounts (when inside a folder drill-down)
   const currentFolderAccounts = useMemo(() => {
-    if (!activeFolder) return filteredAccounts;
-    return filteredAccounts.filter(
+    if (!activeFolder) return sortedAccounts;
+    return sortedAccounts.filter(
       (item) => item.domain.toLowerCase() === activeFolder.fullDomain.toLowerCase()
     );
-  }, [filteredAccounts, activeFolder]);
+  }, [sortedAccounts, activeFolder]);
 
   // Total folders count for header pill
   const totalFoldersCount = useMemo(() => {
@@ -330,6 +365,7 @@ export const MailView: React.FC = () => {
           email: item.recipientEmail,
           forwardTo: NO_FORWARD,
           note: '',
+          createdAt: new Date().toISOString(),
           createdDate: item.receivedDate,
           createdTime: item.receivedTime,
         };
@@ -377,6 +413,8 @@ export const MailView: React.FC = () => {
         totalFoldersCount={totalFoldersCount}
         totalActivityCount={activityItems.length}
         unreadActivityCount={unreadActivityCount}
+        sortOrder={sortOrder}
+        onSortOrderChange={handleSortOrderChange}
       />
 
       {loadError && (
@@ -432,7 +470,7 @@ export const MailView: React.FC = () => {
         </div>
       ) : viewMode === 'folders' ? (
         <MailFolderGridView
-          accounts={filteredAccounts}
+          accounts={sortedAccounts}
           domains={domains}
           onOpenFolder={(folder) => setActiveFolder(folder)}
           onCreateMailInFolder={(folder) => handleOpenCreateMail(folder.fullDomain)}
@@ -452,7 +490,7 @@ export const MailView: React.FC = () => {
       ) : (
         /* Preserved 1:1 Current Design: Table of All Addresses */
         <MailAccountList
-          accounts={filteredAccounts}
+          accounts={sortedAccounts}
           detectedSummaries={detectionMap.byAccountId}
           isLoading={isLoading}
           searchQuery={searchQuery}

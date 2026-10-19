@@ -50,6 +50,7 @@ function persistCache(partial: Partial<MailCacheSnapshot>) {
 
 function toItem(dto: MailAccountDto): MailAccountItem {
   const created = new Date(dto.createdAt);
+  const isValidDate = !isNaN(created.getTime());
   return {
     id: dto.id,
     localPart: dto.localPart,
@@ -57,16 +58,21 @@ function toItem(dto: MailAccountDto): MailAccountItem {
     email: dto.email,
     forwardTo: !dto.forwardTo || dto.forwardTo === 'None' ? NO_FORWARD : dto.forwardTo,
     note: dto.note ?? '',
-    createdDate: created.toLocaleDateString('en-US', {
-      month: 'short',
-      day: '2-digit',
-      year: 'numeric',
-    }),
-    createdTime: created.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
+    createdAt: isValidDate ? created.toISOString() : dto.createdAt || new Date().toISOString(),
+    createdDate: isValidDate
+      ? created.toLocaleDateString('en-US', {
+          month: 'short',
+          day: '2-digit',
+          year: 'numeric',
+        })
+      : '',
+    createdTime: isValidDate
+      ? created.toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      : '',
   };
 }
 
@@ -83,6 +89,10 @@ export const mailService = {
   async list(): Promise<MailAccountItem[]> {
     const rows = await apiRequest<MailAccountDto[]>('/mail');
     const items = rows.map(toItem);
+    // Guarantee newest first (DESC) sorting regardless of client or server quirks
+    items.sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
     persistCache({ accounts: items });
     return items;
   },
@@ -97,8 +107,12 @@ export const mailService = {
       },
     });
     const created = toItem(dto);
+    const existingAccounts = (memoryCache?.accounts ?? []).filter((a) => a.id !== created.id);
+    const updatedAccounts = [created, ...existingAccounts].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
     persistCache({
-      accounts: [created, ...(memoryCache?.accounts ?? [])],
+      accounts: updatedAccounts,
     });
     return created;
   },
