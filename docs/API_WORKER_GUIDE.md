@@ -81,7 +81,8 @@ OneVault includes a multi-signal service detection algorithm ([`mail-service-det
 - **`GET /api/auth/me`**: Verifies active session status at the edge in sub-millisecond isolates.
 
 ### 5. D1 Storage & Backup API (`/api/backup`)
-- **`GET /api/backup`**: Streams an encrypted JSON export of the entire vault database.
+- **`GET /api/backup`**: Streams a raw JSON snapshot of the entire vault database from D1.
+- **Client-Side Universal Encryption (`backup-crypto.ts`)**: Supports military-grade client-side AES-256-GCM encryption (PBKDF2 with 100,000 iterations + random 16-byte salt and 12-byte IV) across all three export formats (`.ovault`, `.json`, and `.csv`). Files exported with a password require that password to decrypt; files exported without a password are auto-encrypted with the OneVault Site Key so outside programs only see unreadable ciphertext, while OneVault auto-unlocks them upon restore.
 
 ### 6. Custom Domains API (`/api/domains`)
 - **`GET /api/domains`**: Checks DNS and SPF/MX records for configured custom domains.

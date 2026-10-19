@@ -22,7 +22,7 @@ import {
   Warning,
 } from '@phosphor-icons/react';
 import { BaseModal } from '../../../shared/components/modals/BaseModal';
-import { decryptVault } from '../services/backup-crypto';
+import { checkIsEncryptedArchive, decryptVault } from '../services/backup-crypto';
 import { settingsService } from '../services/settings.service';
 import type { ImportSummary, ValidationDiagnostics, VaultExportData } from '../types/settings.types';
 
@@ -115,20 +115,12 @@ export const ImportModal: React.FC<ImportModalProps> = ({
     try {
       const trimmed = content.trim();
 
-      // Check if encrypted .ovault container
-      let isEncrypted = false;
-      try {
-        const json = JSON.parse(trimmed);
-        if (json.encrypted === true) {
-          isEncrypted = true;
-          setIsEncryptedBundle(true);
-        }
-      } catch {
-        // Not a JSON object, might be CSV or plaintext
-      }
-
+      // Check if encrypted container (.ovault, encrypted .json, or encrypted .csv)
+      const { isEncrypted, isSystemKey } = checkIsEncryptedArchive(trimmed);
       const pass = customPassphrase ?? passphrase;
-      if (isEncrypted && !pass.trim()) {
+
+      // If user password is required and not provided yet, show password prompt
+      if (isEncrypted && !isSystemKey && !pass.trim()) {
         setIsEncryptedBundle(true);
         setIsValidating(false);
         return; // Wait for user to input passphrase

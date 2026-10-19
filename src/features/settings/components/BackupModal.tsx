@@ -16,7 +16,12 @@ import {
   Fingerprint,
 } from '@phosphor-icons/react';
 import { BaseModal } from '../../../shared/components/modals/BaseModal';
-import { encryptVault, exportToCsv } from '../services/backup-crypto';
+import {
+  encryptVault,
+  encryptVaultToJson,
+  encryptVaultToCsv,
+  exportToCsv,
+} from '../services/backup-crypto';
 import { settingsService } from '../services/settings.service';
 import type { BackupFormat, VaultStats } from '../types/settings.types';
 
@@ -32,6 +37,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   stats,
 }) => {
   const [format, setFormat] = useState<BackupFormat>('ovault');
+  const [isEncrypted, setIsEncrypted] = useState(true);
   const [passphrase, setPassphrase] = useState('');
   const [filename, setFilename] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -80,18 +86,36 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       if (format === 'ovault') {
         setProgressStatus(
           passphrase.trim()
-            ? 'Encrypting with AES-256-GCM on device (0 quota)...'
-            : 'Packaging secure bundle on device (0 quota)...'
+            ? 'Encrypting .ovault with AES-256-GCM (Custom Password)...'
+            : 'Encrypting .ovault with AES-256-GCM (OneVault Site Key)...'
         );
-        fileContent = await encryptVault(vaultData, passphrase);
+        fileContent = await encryptVault(vaultData, passphrase, 'ovault');
         mimeType = 'application/octet-stream';
       } else if (format === 'csv') {
-        setProgressStatus('Formatting tabular CSV on device (0 quota)...');
-        fileContent = exportToCsv(vaultData);
+        if (isEncrypted) {
+          setProgressStatus(
+            passphrase.trim()
+              ? 'Encrypting CSV with AES-256-GCM (Custom Password)...'
+              : 'Encrypting CSV with AES-256-GCM (OneVault Site Key)...'
+          );
+          fileContent = await encryptVaultToCsv(vaultData, passphrase);
+        } else {
+          setProgressStatus('Formatting unencrypted plain CSV on device (0 quota)...');
+          fileContent = exportToCsv(vaultData);
+        }
         mimeType = 'text/csv;charset=utf-8;';
       } else {
-        setProgressStatus('Serializing portable JSON on device (0 quota)...');
-        fileContent = JSON.stringify(vaultData, null, 2);
+        if (isEncrypted) {
+          setProgressStatus(
+            passphrase.trim()
+              ? 'Encrypting JSON with AES-256-GCM (Custom Password)...'
+              : 'Encrypting JSON with AES-256-GCM (OneVault Site Key)...'
+          );
+          fileContent = await encryptVaultToJson(vaultData, passphrase);
+        } else {
+          setProgressStatus('Serializing unencrypted plain JSON on device (0 quota)...');
+          fileContent = JSON.stringify(vaultData, null, 2);
+        }
         mimeType = 'application/json';
       }
 
@@ -294,7 +318,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </div>
               <div className="mt-2">
                 <div className="text-xs font-bold text-fg-primary">.ovault</div>
-                <div className="text-[10px] text-fg-muted line-clamp-1">Encrypted</div>
+                <div className="text-[10px] text-fg-muted line-clamp-1">Encrypted Vault</div>
               </div>
             </button>
 
@@ -309,14 +333,23 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   : 'border-default bg-surface hover:bg-elevated'
               }`}
             >
-              <FileCode
-                size={18}
-                weight="duotone"
-                className={format === 'json' ? 'text-accent' : 'text-fg-muted'}
-              />
+              <div className="flex items-center justify-between w-full">
+                <FileCode
+                  size={18}
+                  weight="duotone"
+                  className={format === 'json' ? 'text-accent' : 'text-fg-muted'}
+                />
+                {isEncrypted && (
+                  <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-full bg-accent/20 text-accent">
+                    AES-256
+                  </span>
+                )}
+              </div>
               <div className="mt-2">
                 <div className="text-xs font-bold text-fg-primary">.json</div>
-                <div className="text-[10px] text-fg-muted line-clamp-1">Standard</div>
+                <div className="text-[10px] text-fg-muted line-clamp-1">
+                  {isEncrypted ? 'Encrypted JSON' : 'Plain JSON'}
+                </div>
               </div>
             </button>
 
@@ -331,39 +364,81 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   : 'border-default bg-surface hover:bg-elevated'
               }`}
             >
-              <FileCsv
-                size={18}
-                weight="duotone"
-                className={format === 'csv' ? 'text-accent' : 'text-fg-muted'}
-              />
+              <div className="flex items-center justify-between w-full">
+                <FileCsv
+                  size={18}
+                  weight="duotone"
+                  className={format === 'csv' ? 'text-accent' : 'text-fg-muted'}
+                />
+                {isEncrypted && (
+                  <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.5 rounded-full bg-accent/20 text-accent">
+                    AES-256
+                  </span>
+                )}
+              </div>
               <div className="mt-2">
                 <div className="text-xs font-bold text-fg-primary">.csv</div>
-                <div className="text-[10px] text-fg-muted line-clamp-1">Tabular</div>
+                <div className="text-[10px] text-fg-muted line-clamp-1">
+                  {isEncrypted ? 'Encrypted CSV' : 'Plain CSV'}
+                </div>
               </div>
             </button>
           </div>
         </div>
 
-        {/* Optional Passphrase for .ovault encryption */}
-        {format === 'ovault' && (
-          <div className="space-y-1.5 p-3 rounded-xl bg-surface border border-accent/25">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-fg-primary">
+        {/* Universal Encryption Controls (Applies to all formats) */}
+        <div className="space-y-2 p-3 rounded-xl bg-surface border border-accent/25">
+          <div className="flex items-center justify-between text-xs font-semibold text-fg-primary">
+            <div className="flex items-center gap-1.5">
               <LockKey size={14} className="text-accent" />
-              <span>Encryption Password (Optional)</span>
+              <span>AES-256-GCM Encryption</span>
             </div>
-            <input
-              type="password"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              disabled={isProcessing}
-              placeholder="Enter passphrase to encrypt with AES-GCM 256-bit"
-              className="w-full px-3 py-1.5 rounded-lg bg-elevated border border-default text-xs text-fg-primary placeholder:text-fg-muted focus:border-accent focus:outline-none font-mono"
-            />
-            <p className="text-[10px] text-fg-muted font-mono">
-              Runs client-side in browser memory. 0 passwords sent over the network.
-            </p>
+            {format !== 'ovault' ? (
+              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-mono font-normal text-fg-secondary">
+                <input
+                  type="checkbox"
+                  checked={isEncrypted}
+                  onChange={(e) => setIsEncrypted(e.target.checked)}
+                  disabled={isProcessing}
+                  className="rounded border-default text-accent focus:ring-accent"
+                />
+                <span>Encrypted Export</span>
+              </label>
+            ) : (
+              <span className="text-[10px] font-mono text-accent bg-accent/15 px-2 py-0.5 rounded-full font-bold">
+                ALWAYS ON
+              </span>
+            )}
           </div>
-        )}
+
+          {(isEncrypted || format === 'ovault') ? (
+            <>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-fg-secondary font-medium">Password (Optional)</span>
+                <span className="text-[9px] font-mono text-accent bg-accent/15 px-1.5 py-0.5 rounded font-bold">
+                  {passphrase.trim() ? 'CUSTOM PASSWORD' : 'ONEVAULT SITE KEY'}
+                </span>
+              </div>
+              <input
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                disabled={isProcessing}
+                placeholder="Enter passphrase (or leave blank to auto-lock with OneVault Site Key)"
+                className="w-full px-3 py-1.5 rounded-lg bg-elevated border border-default text-xs text-fg-primary placeholder:text-fg-muted focus:border-accent focus:outline-none font-mono"
+              />
+              <p className="text-[10px] text-fg-muted font-mono leading-relaxed">
+                {passphrase.trim()
+                  ? '🔒 Encrypted with your private passphrase. You will need this password to import.'
+                  : '🛡️ Encrypted with OneVault Site Key. The exported file will be unreadable ciphertext to outside software, and only OneVault can unlock it.'}
+              </p>
+            </>
+          ) : (
+            <p className="text-[10px] text-amber-500 font-mono leading-relaxed pt-1">
+              ⚠️ Exporting unencrypted plaintext. Anyone who opens the file will be able to read all records in plain text.
+            </p>
+          )}
+        </div>
 
         {/* File name input */}
         <div className="space-y-1.5">

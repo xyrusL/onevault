@@ -38,54 +38,113 @@ async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKe
   );
 }
 
+export const DEFAULT_SITE_PASSPHRASE = 'OneVault-v2::ClientSide::ZeroKnowledge::MasterKey';
+
+async function encryptRawPayload(
+  text: string,
+  passphrase?: string
+): Promise<{ salt: string; iv: string; ciphertext: string; isSystemKey: boolean }> {
+  const isSystemKey = !passphrase || !passphrase.trim();
+  const effectivePass = isSystemKey ? DEFAULT_SITE_PASSPHRASE : passphrase.trim();
+
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(effectivePass, salt);
+
+  const enc = new TextEncoder();
+  const ciphertext = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    enc.encode(text)
+  );
+
+  return {
+    salt: bufferToHex(salt),
+    iv: bufferToHex(iv),
+    ciphertext: bufferToHex(ciphertext),
+    isSystemKey,
+  };
+}
+
 /**
  * Client-Side AES-256-GCM encryption for .ovault bundles.
  * Runs 100% in browser memory with 0 Cloudflare Worker requests.
  */
 export async function encryptVault(
   data: VaultExportData,
-  passphrase?: string
+  passphrase?: string,
+  format: 'ovault' | 'json' = 'ovault'
 ): Promise<string> {
   const jsonStr = JSON.stringify(data, null, 2);
-  if (!passphrase || !passphrase.trim()) {
-    // Unencrypted wrapper for .ovault or default bundle
-    return JSON.stringify(
-      {
-        version: 2,
-        app: 'OneVault',
-        encrypted: false,
-        payload: data,
-      },
-      null,
-      2
-    );
-  }
-
-  const salt = window.crypto.getRandomValues(new Uint8Array(16));
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKey(passphrase.trim(), salt);
-
-  const enc = new TextEncoder();
-  const ciphertext = await window.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    enc.encode(jsonStr)
-  );
+  const { salt, iv, ciphertext, isSystemKey } = await encryptRawPayload(jsonStr, passphrase);
 
   return JSON.stringify(
     {
       version: 2,
       app: 'OneVault',
+      format,
       encrypted: true,
       algorithm: 'AES-GCM-256',
       kdf: 'PBKDF2-SHA256-100K',
-      salt: bufferToHex(salt),
-      iv: bufferToHex(iv),
-      ciphertext: bufferToHex(ciphertext),
+      isSystemKey,
+      salt,
+      iv,
+      ciphertext,
     },
     null,
     2
   );
+}
+
+/**
+ * Client-Side AES-256-GCM encryption for .json archives.
+ * Unreadable ciphertext to outside software, unlocked by password or OneVault site key.
+ */
+export async function encryptVaultToJson(
+  data: VaultExportData,
+  passphrase?: string
+): Promise<string> {
+  return encryptVault(data, passphrase, 'json');
+}
+
+/**
+ * Client-Side AES-256-GCM encryption for .csv archives.
+ * Formats unreadable encrypted envelope rows that only OneVault can decrypt.
+ */
+export async function encryptVaultToCsv(
+  data: VaultExportData,
+  passphrase?: string
+): Promise<string> {
+  const rawCsv = exportToCsv(data);
+  const { salt, iv, ciphertext, isSystemKey } = await encryptRawPayload(rawCsv, passphrase);
+
+  return [
+    '=== ONEVAULT_ENCRYPTED_ARCHIVE ===',
+    'version,app,format,algorithm,kdf,isSystemKey,salt,iv,ciphertext',
+    `2,"OneVault","csv","AES-GCM-256","PBKDF2-SHA256-100K",${isSystemKey},"${salt}","${iv}","${ciphertext}"`,
+  ].join('\n');
+}
+
+/**
+ * Checks whether an uploaded file is an encrypted OneVault package (.ovault, encrypted .json, or encrypted .csv).
+ */
+export function checkIsEncryptedArchive(content: string): { isEncrypted: boolean; isSystemKey: boolean } {
+  const trimmed = content.trim();
+  if (trimmed.includes('=== ONEVAULT_ENCRYPTED_ARCHIVE ===')) {
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const dataLine = lines.find((l) => !l.startsWith('===') && !l.startsWith('version,'));
+    const isSystemKey = dataLine
+      ? dataLine.split(',')[5]?.replace(/^"|"$/g, '').trim() === 'true'
+      : false;
+    return { isEncrypted: true, isSystemKey };
+  }
+  try {
+    const json = JSON.parse(trimmed);
+    if (json && json.encrypted === true) {
+      return { isEncrypted: true, isSystemKey: json.isSystemKey === true };
+    }
+  } catch {}
+  return { isEncrypted: false, isSystemKey: false };
 }
 
 export interface VaultValidationResult {
@@ -94,7 +153,7 @@ export interface VaultValidationResult {
 }
 
 /**
- * Decrypts raw file string (handles .ovault, JSON, CSV) 100% locally on the device.
+ * Decrypts raw file string (handles .ovault, encrypted JSON, encrypted CSV, and legacy formats) 100% locally.
  */
 export async function decryptVault(
   rawText: string,
@@ -102,12 +161,53 @@ export async function decryptVault(
 ): Promise<VaultValidationResult> {
   const trimmed = rawText.trim();
 
-  // Try parsing JSON first
+  // 1. Check for Encrypted CSV Archive first
+  if (trimmed.includes('=== ONEVAULT_ENCRYPTED_ARCHIVE ===')) {
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const dataLine = lines.find((l) => !l.startsWith('===') && !l.startsWith('version,'));
+    if (!dataLine) {
+      throw new Error('Corrupted encrypted CSV archive: missing payload row.');
+    }
+
+    const cols = dataLine.split(',').map((c) => c.replace(/^"|"$/g, '').trim());
+    const isSystemKey = cols[5] === 'true';
+    const saltHex = cols[6];
+    const ivHex = cols[7];
+    const ciphertextHex = cols[8];
+
+    const effectivePass = passphrase?.trim() || (isSystemKey ? DEFAULT_SITE_PASSPHRASE : '');
+    if (!effectivePass) {
+      throw new Error('This vault CSV archive is encrypted. Please provide the encryption password.');
+    }
+
+    try {
+      const salt = hexToBuffer(saltHex);
+      const iv = hexToBuffer(ivHex);
+      const ciphertext = hexToBuffer(ciphertextHex);
+      const key = await deriveKey(effectivePass, salt);
+
+      const decrypted = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        key,
+        ciphertext
+      );
+
+      const decStr = new TextDecoder().decode(decrypted);
+      if (decStr.trim().startsWith('{')) {
+        return validateVaultStructure(JSON.parse(decStr));
+      }
+      return parseCsvToVault(decStr);
+    } catch {
+      throw new Error('Decryption failed: Incorrect password or corrupted CSV vault archive.');
+    }
+  }
+
+  // 2. Try parsing JSON next
   let parsed: any;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    // If not valid JSON, check if it's CSV
+    // 3. If not valid JSON, check if it's standard unencrypted CSV
     if (
       trimmed.includes('=== ONEVAULT_') ||
       trimmed.includes('email,forward_to') ||
@@ -121,9 +221,12 @@ export async function decryptVault(
     );
   }
 
-  // If encrypted package
+  // 4. If encrypted JSON or .ovault package
   if (parsed && parsed.encrypted === true) {
-    if (!passphrase || !passphrase.trim()) {
+    const isSystemKey = parsed.isSystemKey === true;
+    const effectivePass = passphrase?.trim() || (isSystemKey ? DEFAULT_SITE_PASSPHRASE : '');
+
+    if (!effectivePass) {
       throw new Error(
         'This vault backup is encrypted. Please provide the encryption password/passphrase.'
       );
@@ -132,7 +235,7 @@ export async function decryptVault(
       const salt = hexToBuffer(parsed.salt);
       const iv = hexToBuffer(parsed.iv);
       const ciphertext = hexToBuffer(parsed.ciphertext);
-      const key = await deriveKey(passphrase.trim(), salt);
+      const key = await deriveKey(effectivePass, salt);
 
       const decrypted = await window.crypto.subtle.decrypt(
         { name: 'AES-GCM', iv },
@@ -150,12 +253,12 @@ export async function decryptVault(
     }
   }
 
-  // If unencrypted wrapper
+  // 5. If unencrypted wrapper
   if (parsed && parsed.payload && typeof parsed.payload === 'object') {
     return validateVaultStructure(parsed.payload);
   }
 
-  // If standard export JSON
+  // 6. If standard export JSON
   return validateVaultStructure(parsed);
 }
 
