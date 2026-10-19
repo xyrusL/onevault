@@ -187,28 +187,18 @@ async function syncWithCloudflare(env: Env): Promise<void> {
         const match = byRuleId.get(ruleId) ?? byEmail.get(email);
         if (match) {
           seenIds.add(match.id);
-          // If this row was an imported rule (note is null) and was mistakenly given a recent sync date,
-          // heal its created_at so old Cloudflare rules do not eclipse new OneVault emails.
-          const isImportedWithoutNote = !match.note;
-          const shouldHealDate =
-            isImportedWithoutNote &&
-            typeof match.created_at === 'string' &&
-            match.created_at.startsWith('2026-10-19');
-          const finalCreatedAt = shouldHealDate ? importedCreatedAt : match.created_at;
-
           if (
             match.routing_rule_id !== ruleId ||
             match.zone_id !== zone.id ||
             match.forward_to !== forwardTo ||
-            match.email !== email ||
-            shouldHealDate
+            match.email !== email
           ) {
             await env.DB.prepare(
               `UPDATE mail_accounts
-               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?, created_at = ?
+               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?
                WHERE id = ?`
             )
-              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, finalCreatedAt, match.id)
+              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, match.id)
               .run();
           }
         } else {
