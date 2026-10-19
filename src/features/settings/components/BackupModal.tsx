@@ -14,8 +14,10 @@ import {
   Key,
   Globe,
   Fingerprint,
+  Database,
 } from '@phosphor-icons/react';
 import { BaseModal } from '../../../shared/components/modals/BaseModal';
+import { CustomCheckbox } from '../../../shared/components/forms';
 import {
   encryptVault,
   encryptVaultToJson,
@@ -213,79 +215,87 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             </span>
           </div>
 
-          {/* Responsive Collection Pill Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+          {/* Responsive Collection Pill Grid (8 collections cleanly filling 4 columns / 2 rows) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <NotePencil size={15} className="text-purple-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">Notes</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Notes</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {stats?.notes ?? 0}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <FolderSimple size={15} className="text-blue-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">Folders</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Folders</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {stats?.noteFolders ?? 0}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <Key size={15} className="text-emerald-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">2FA Tokens</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">2FA Tokens</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {stats?.twoFactorTokens ?? 0}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
+              <Fingerprint size={15} className="text-rose-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Passkeys</div>
+                <div className="text-xs font-mono font-semibold text-fg-primary">
+                  {stats?.passkeys ?? 0}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <EnvelopeSimple size={15} className="text-amber-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">Mailboxes</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Mailboxes</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {stats?.mailAccounts ?? 0}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <ChatText size={15} className="text-cyan-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">Inbound Mail</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Inbound Mail</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {stats?.mailMessages ?? 0}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
               <Globe size={15} className="text-indigo-400 shrink-0" />
-              <div className="min-w-0">
-                <div className="text-[10px] font-mono text-fg-muted uppercase">Domains</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">Domains</div>
                 <div className="text-xs font-mono font-semibold text-fg-primary">
                   {(stats?.customDomains ?? 0) + (stats?.mailSubdomains ?? 0)}
                 </div>
               </div>
             </div>
 
-            {(stats?.passkeys ?? 0) > 0 && (
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle">
-                <Fingerprint size={15} className="text-rose-400 shrink-0" />
-                <div className="min-w-0">
-                  <div className="text-[10px] font-mono text-fg-muted uppercase">Passkeys</div>
-                  <div className="text-xs font-mono font-semibold text-fg-primary">
-                    {stats?.passkeys}
-                  </div>
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-elevated/50 border border-subtle min-w-0">
+              <Database size={15} className="text-sky-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-mono text-fg-muted uppercase truncate">DNS Records</div>
+                <div className="text-xs font-mono font-semibold text-fg-primary">
+                  {stats?.domainDnsRecords ?? 0}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -394,16 +404,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               <span>AES-256-GCM Encryption</span>
             </div>
             {format !== 'ovault' ? (
-              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-mono font-normal text-fg-secondary">
-                <input
-                  type="checkbox"
-                  checked={isEncrypted}
-                  onChange={(e) => setIsEncrypted(e.target.checked)}
-                  disabled={isProcessing}
-                  className="rounded border-default text-accent focus:ring-accent"
-                />
-                <span>Encrypted Export</span>
-              </label>
+              <CustomCheckbox
+                checked={isEncrypted}
+                onChange={setIsEncrypted}
+                disabled={isProcessing}
+                label="Encrypted Export"
+              />
             ) : (
               <span className="text-[10px] font-mono text-accent bg-accent/15 px-2 py-0.5 rounded-full font-bold">
                 ALWAYS ON
