@@ -144,3 +144,107 @@ When building or refactoring a feature:
 3. **Tailwind CSS + Custom CSS Synergy (`src/theme/tokens.css`)**:
    - Primary styling uses Tailwind CSS semantic token classes (`bg-surface`, `text-fg-primary`, `border-default`).
    - Custom CSS helpers exist in `src/theme/tokens.css` for complex SVG alignment, animations, and custom scrollbars.
+
+---
+
+## Local-First & Debounced Batch Sync Engine
+
+To guarantee instant responsiveness (perceived 0ms write latency) while strictly minimizing database write operations (staying effortlessly within Cloudflare's 100% Free Tier: 100,000 requests/day and 5M D1 reads/day), OneVault employs a **Local-First Debounced Batch Sync Architecture** managed by [`syncQueueService`](../src/shared/services/sync-queue.service.ts).
+
+```text
+User Action (Edit Note, Destination, or Filters)
+        │
+        ▼
+[Stage 1: Optimistic Local State]
+  ├── React State (0ms Perceived Latency)
+  ├── Local Cache (onevault.mail.cache.v1)
+  └── Persistent Sync Queue (localStorage: onevault_pending_sync_queue)
+        │
+        ▼
+[Stage 2: Idle Debounce Controller (2500ms)]
+  ├── Merges rapid duplicate mutations by item ID
+  └── Resets timer on each keystroke or user edit
+        │
+   ┌────┴──────────────────────────┐
+   │                               │
+   ▼                               ▼
+[Timer Expires (Idle)]      [Browser Lifecycle Event]
+                            ├── `visibilitychange` (User switches tab/minimizes)
+                            ├── `beforeunload` (User closes browser/window)
+                            └── `online` (Network reconnects after offline)
+                                   │
+                                   ▼
+                      [Stage 3: Cloudflare Worker API]
+                        ├── PATCH /api/mail/:id
+                        └── POST /api/mail/preferences
+                                   │
+                                   ▼
+                      [Stage 4: Cloudflare D1 Database]
+                        (Single, consolidated write transaction)
+```
+
+### Key Pillars:
+1. **0ms Perceived Latency**:
+   - Updates to React state and `localStorage` happen synchronously. The UI never freezes or displays blocking modal spinners for small text edits or note changes.
+2. **D1 Write Minimization & Batching**:
+   - If a user types 50 characters in a note or tweaks a mail destination 5 times in 10 seconds, all 50 intermediate keystrokes are merged into **one single write mutation** by unique ID (`mail_${accountId}`).
+3. **Zero Data Loss Guarantee**:
+   - In addition to the 2.5-second idle trigger, the sync queue listens to standard browser lifecycle events (`visibilitychange` and `beforeunload`). If the user types a note and immediately closes the tab or switches apps, the queue flushes to the Worker before navigation completes.
+4. **Offline Resilience & Auto-Recovery**:
+   - Pending items remain in `localStorage`. If the user loses internet connection or reloads the tab, the queue automatically reloads from storage and flushes the moment the browser fires an `online` event.
+
+---
+
+## Universal Automatic Modular Write Pattern
+
+To prevent developers from manually writing custom debouncing or sync boilerplate in every UI component, all write mutations are routed through the shared API layer:
+
+```text
+User Makes Changes (Notes, Mails, Folders, Preferences)
+                     │
+                     ▼
+       Domain Service Method (e.g. `mailService.update()`, `notesService.updateNote()`)
+                     │
+                     ▼
+       `apiClient.syncPatch()` / `apiClient.syncPost()` / `apiClient.syncWrite()`
+                     │
+       ┌─────────────┴────────────────────────┐
+       │                                      │
+       ▼                                      ▼
+[Instant Local Feedback]             [Background Sync Engine]
+• Updates memory cache               • Stages in `localStorage`
+• Resolves promise immediately (0ms) • Debounces multiple rapid edits
+                                     • When idle or tab closed ──> Uploads to D1 Storage
+```
+
+### How to use for any new API or Feature:
+Instead of calling immediate network writes (`apiRequest` / raw `fetch`):
+```ts
+// ❌ Old / Direct Way (Writes immediately on every single keystroke, exhausting D1 quotas):
+await apiRequest('/api/my-feature/1', { method: 'PATCH', body });
+
+// ✅ Automatic Local-First Sync Way:
+await apiClient.syncPatch('/my-feature/1', body, 'my_feature_1', optimisticItem);
+```
+OR using `apiRequest` with the `sync` flag:
+```ts
+await apiRequest('/my-feature/1', {
+  method: 'PATCH',
+  body,
+  sync: true,
+  syncKey: 'my_feature_1',
+  optimisticData: optimisticItem,
+});
+```
+Any UI component calling the service automatically receives:
+1. Instant 0ms perceived response.
+2. Background consolidation of rapid edits.
+3. Safe uploads only when the user pauses or exits.
+
+### Rules for Future AI Agents & Engineers:
+| Rule | What to Do | What NOT to Do |
+| :--- | :--- | :--- |
+| **Component Simplicity** | Call the domain service (`await mailService.update(id, payload)`). | **Never** write custom `setTimeout`, debouncers, or local queue logic in React components. |
+| **Mutation Routing** | Route writes through `apiClient.syncPatch()` or `{ sync: true }`. | **Never** fire immediate raw network writes on every keystroke. |
+| **Key Deduplication** | Pass a unique `syncKey` (e.g. `mail_${id}`, `note_${id}`). | Don't omit keys on rapid edits, or distinct edits may not coalesce properly. |
+| **0ms UI Response** | Update local cache synchronously so UI re-renders instantly. | **Never** show blocking loading spinners or disable form inputs during text editing. |

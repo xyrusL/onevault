@@ -24,6 +24,7 @@ import { MailInboxModalContent } from './components/MailInboxModalContent';
 import { MailNotePadModalContent } from './components/MailNotePadModalContent';
 import { MailAccountActivityModalContent } from './components/service-activity';
 import { ServiceBadgeStyleProvider } from './context/ServiceBadgeStyleContext';
+import { apiRequest } from '../../shared/services/api-client.service';
 import { mailInboxService } from './services/mail-inbox.service';
 import { mailService } from './services/mail.service';
 import { MailActivityItem } from './types/mail-inbox.types';
@@ -106,17 +107,56 @@ export const MailView: React.FC = () => {
 
   const [filters, setFilters] = useState<MailFilterState>(() => {
     try {
-      const saved = localStorage.getItem('onevault.mail.filters');
-      if (saved) return JSON.parse(saved);
+      const savedStr = localStorage.getItem('onevault.mail.filters');
+      if (savedStr) {
+        const parsed = JSON.parse(savedStr);
+        return {
+          status: parsed.status || 'all',
+          activity: parsed.activity || 'all',
+          domains: Array.isArray(parsed.domains)
+            ? parsed.domains
+            : (parsed.domain && parsed.domain !== 'all' ? [parsed.domain] : []),
+          services: Array.isArray(parsed.services)
+            ? parsed.services
+            : (parsed.service && parsed.service !== 'all' ? [parsed.service] : []),
+        };
+      }
     } catch {}
     return DEFAULT_MAIL_FILTERS;
   });
 
   const handleFilterChange = (newFilters: MailFilterState) => {
     setFilters(newFilters);
+    // Auto-switch to 'all' (All Addresses) tab if user is currently on 'folders' or 'activity' or inside a folder
+    if (viewMode !== 'all' || activeFolder !== null) {
+      setViewMode('all');
+      setActiveFolder(null);
+    }
     try {
       localStorage.setItem('onevault.mail.filters', JSON.stringify(newFilters));
+      // Track usage count for selected services so most-used services rank first
+      if (newFilters.services && newFilters.services.length > 0) {
+        const raw = localStorage.getItem('onevault.mail.filter_usage');
+        const usage = raw ? JSON.parse(raw) : { services: {} };
+        if (!usage.services) usage.services = {};
+        for (const s of newFilters.services) {
+          usage.services[s] = (usage.services[s] || 0) + 1;
+        }
+        localStorage.setItem('onevault.mail.filter_usage', JSON.stringify(usage));
+      }
     } catch {}
+
+    // Queue filter preferences to cloud automatically via modular sync write in mailService
+    void mailService.savePreferences(newFilters);
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    // If user enters a search query while on folders or inside a folder, auto-switch to All Addresses
+    if (query.trim().length > 0 && (viewMode !== 'all' || activeFolder !== null)) {
+      setViewMode('all');
+      setActiveFolder(null);
+    }
   };
 
   // Compute smart service detection map across all accounts & activity items
@@ -133,15 +173,34 @@ export const MailView: React.FC = () => {
     return Array.from(set).sort();
   }, [accounts]);
 
-  // Available service tags across all accounts
+  // Available service tags across all accounts, prioritized by frequency & user usage (most-used first)
   const availableServices = useMemo(() => {
-    const set = new Set<string>();
+    const accountCountMap = new Map<string, number>();
     for (const s of detectionMap.byAccountId.values()) {
       for (const tag of s.tags) {
-        if (tag.name) set.add(tag.name);
+        if (tag.name) {
+          accountCountMap.set(tag.name, (accountCountMap.get(tag.name) || 0) + 1);
+        }
       }
     }
-    return Array.from(set).sort();
+
+    let userUsageMap: Record<string, number> = {};
+    try {
+      const raw = localStorage.getItem('onevault.mail.filter_usage');
+      if (raw) {
+        userUsageMap = JSON.parse(raw).services || {};
+      }
+    } catch {}
+
+    const tags = Array.from(accountCountMap.keys());
+    return tags.sort((a, b) => {
+      const scoreA = ((userUsageMap[a] || 0) * 5) + (accountCountMap.get(a) || 0);
+      const scoreB = ((userUsageMap[b] || 0) * 5) + (accountCountMap.get(b) || 0);
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA; // Highest frequency / most used first
+      }
+      return a.localeCompare(b); // Alphabetical fallback
+    });
   }, [detectionMap]);
 
   // Global search & multi-criteria filtering for accounts
@@ -174,20 +233,18 @@ export const MailView: React.FC = () => {
       );
     }
 
-    // 4. Domain Filter
-    if (filters.domain && filters.domain !== 'all') {
-      result = result.filter(
-        (item) => item.domain.toLowerCase() === filters.domain.toLowerCase()
-      );
+    // 4. Domains Filter (Multi-Select)
+    if (filters.domains && filters.domains.length > 0) {
+      const allowed = new Set(filters.domains.map((d) => d.toLowerCase()));
+      result = result.filter((item) => allowed.has(item.domain.toLowerCase()));
     }
 
-    // 5. Service Tag Filter
-    if (filters.service && filters.service !== 'all') {
+    // 5. Service Tags Filter (Multi-Select)
+    if (filters.services && filters.services.length > 0) {
+      const allowed = new Set(filters.services.map((s) => s.toLowerCase()));
       result = result.filter((item) => {
         const summary = detectionMap.byAccountId.get(item.id);
-        return summary?.tags.some(
-          (t) => t.name.toLowerCase() === filters.service.toLowerCase()
-        );
+        return summary?.tags.some((t) => allowed.has(t.name.toLowerCase()));
       });
     }
 
@@ -235,11 +292,13 @@ export const MailView: React.FC = () => {
       result = result.filter((item) => isVaultDestination(item.forwardTo));
     }
 
-    // Domain filter
-    if (filters.domain && filters.domain !== 'all') {
-      result = result.filter((item) =>
-        item.recipientEmail.toLowerCase().endsWith(`@${filters.domain.toLowerCase()}`)
-      );
+    // Domains Filter (Multi-Select)
+    if (filters.domains && filters.domains.length > 0) {
+      const allowed = new Set(filters.domains.map((d) => d.toLowerCase()));
+      result = result.filter((item) => {
+        const domain = item.recipientEmail.split('@')[1]?.toLowerCase();
+        return domain ? allowed.has(domain) : false;
+      });
     }
 
     return result;
@@ -316,6 +375,22 @@ export const MailView: React.FC = () => {
             : 'Unable to load mail data.'
         );
       }
+
+      // Restore cloud-saved filter preferences if available
+      void apiRequest<{ preferences: MailFilterState | null }>('/mail/preferences')
+        .then((res) => {
+          if (res?.preferences) {
+            setFilters((current) => {
+              const isDefault =
+                current.status === 'all' &&
+                current.activity === 'all' &&
+                current.domains.length === 0 &&
+                current.services.length === 0;
+              return isDefault ? res.preferences! : current;
+            });
+          }
+        })
+        .catch(() => {});
     } finally {
       setIsLoading(false);
     }
@@ -347,13 +422,14 @@ export const MailView: React.FC = () => {
     accountId: string,
     payload: UpdateMailPayload
   ) => {
+    // Modular write: mailService automatically updates memory/storage cache and handles the debounced sync queue!
     const updated = await mailService.update(accountId, payload);
+
     setAccounts((prev) =>
       prev.map((item) => (item.id === accountId ? updated : item))
     );
     setSelectedAccount((prev) => (prev && prev.id === accountId ? updated : prev));
     setNotePadAccount((prev) => (prev && prev.id === accountId ? updated : prev));
-    // Update forwardTo in local activity items for this account
     setActivityItems((prev) =>
       prev.map((act) =>
         act.mailAccountId === accountId
@@ -504,7 +580,7 @@ export const MailView: React.FC = () => {
           }
         }}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
         onCreateClick={() => handleOpenCreateMail()}
         onCreateSubdomainClick={() => handleOpenCreateSubdomain()}
         totalEmailsCount={accounts.length}
@@ -682,6 +758,7 @@ export const MailView: React.FC = () => {
         subtitle={activityModalAccount?.email}
         icon={<Pulse size={15} weight="bold" className="text-sky-400" />}
         maxWidthClass="max-w-2xl"
+        bodyClassName="p-4 sm:p-5 flex flex-col min-h-0 overflow-hidden"
       >
         {activityModalAccount && (
           <MailAccountActivityModalContent

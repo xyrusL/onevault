@@ -1,4 +1,4 @@
-import { apiRequest } from '../../../shared/services/api-client.service';
+import { apiClient, apiRequest } from '../../../shared/services/api-client.service';
 import {
   CreateMailPayload,
   ForwardTarget,
@@ -118,22 +118,61 @@ export const mailService = {
   },
 
   async update(id: string, payload: UpdateMailPayload): Promise<MailAccountItem> {
-    const dto = await apiRequest<MailAccountDto>(`/mail/${id}`, {
-      method: 'PATCH',
-      body: {
-        forwardTo: forwardValue(payload.forwardTo),
-        note: payload.note.trim() || null,
+    const existing = memoryCache?.accounts.find((a) => a.id === id);
+    const updated: MailAccountItem = existing
+      ? {
+          ...existing,
+          forwardTo:
+            payload.forwardTo !== undefined
+              ? payload.forwardTo === 'None' || payload.forwardTo === ''
+                ? NO_FORWARD
+                : payload.forwardTo
+              : existing.forwardTo,
+          note: payload.note !== undefined ? payload.note.trim() : existing.note,
+        }
+      : ({
+          id,
+          localPart: '',
+          domain: '',
+          email: '',
+          forwardTo: payload.forwardTo ?? NO_FORWARD,
+          note: payload.note ?? '',
+          createdAt: new Date().toISOString(),
+          createdDate: '',
+          createdTime: '',
+        } as MailAccountItem);
+
+    // 1. Instantly update memory & localStorage cache
+    this.updateCachedAccount(updated);
+
+    // 2. Automatically route through debounced sync queue
+    await apiClient.syncPatch(
+      `/mail/${id}`,
+      {
+        forwardTo: forwardValue(updated.forwardTo),
+        note: updated.note || null,
       },
-    });
-    const updated = toItem(dto);
+      `mail_${id}`,
+      updated
+    );
+
+    return updated;
+  },
+
+  /** Persists user filter preferences to cloud via debounced sync queue */
+  async savePreferences(preferences: import('../types/mail.types').MailFilterState): Promise<void> {
+    await apiClient.syncPost('/mail/preferences', preferences, 'mail_filter_preferences');
+  },
+
+  /** Immediately updates the local memory & storage cache optimistically */
+  updateCachedAccount(updated: MailAccountItem): void {
     if (memoryCache) {
       persistCache({
         accounts: memoryCache.accounts.map((item) =>
-          item.id === id ? updated : item
+          item.id === updated.id ? updated : item
         ),
       });
     }
-    return updated;
   },
 
   async remove(id: string): Promise<void> {

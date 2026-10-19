@@ -75,14 +75,14 @@ export type MailActivityFilter = 'all' | 'with-activity' | 'no-activity';
 export interface MailFilterState {
   status: MailStatusFilter;
   activity: MailActivityFilter;
-  domain: string;
-  service: string;
+  domains: string[];
+  services: string[];
 }
 
 export const DEFAULT_MAIL_FILTERS: MailFilterState = {
   status: 'all',
   activity: 'all',
-  domain: 'all',
-  service: 'all',
+  domains: [],
+  services: [],
 };
 

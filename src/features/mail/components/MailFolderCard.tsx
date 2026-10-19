@@ -1,5 +1,5 @@
 import React from 'react';
-import { CaretRight, Plus, Trash } from '@phosphor-icons/react';
+import { FolderOpen, Plus, Trash } from '@phosphor-icons/react';
 import { MailFolderInfo } from '../types/mail.types';
 import { resolveSubdomainTheme, SubdomainIcon } from './SubdomainIcon';
 
@@ -111,16 +111,19 @@ export const MailFolderCard: React.FC<MailFolderCardProps> = ({
             </button>
           )}
 
-          <span
-            className="inline-flex items-center gap-0.5 text-xs font-medium text-fg-muted group-hover:text-fg-primary transition-colors"
+          {/* View Folder Action Button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenFolder(folder);
+            }}
+            title={`View ${subtitle}`}
+            aria-label={`View ${subtitle}`}
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-default bg-elevated text-fg-muted hover:text-sky-300 hover:border-sky-500/40 hover:bg-sky-500/15 group-hover:border-strong group-hover:text-fg-primary transition-all duration-150 cursor-pointer"
           >
-            <span>View</span>
-            <CaretRight
-              size={12}
-              weight="bold"
-              className="transition-transform duration-200 group-hover:translate-x-0.5 text-fg-muted group-hover:text-fg-primary"
-            />
-          </span>
+            <FolderOpen size={13} weight="duotone" />
+          </button>
         </div>
       </div>
     </div>

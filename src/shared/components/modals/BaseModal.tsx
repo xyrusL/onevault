@@ -102,8 +102,14 @@ export const BaseModal: React.FC<BaseModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body Content — scrollable on mobile */}
-        <div className={`flex-1 overflow-y-auto text-sm text-fg-primary ${bodyClassName || 'p-4'}`}>
+        {/* Modal Body Content */}
+        <div
+          className={`flex-1 ${
+            bodyClassName && /\boverflow(-[xy])?-(auto|hidden|scroll|visible)\b/.test(bodyClassName)
+              ? ''
+              : 'overflow-y-auto'
+          } text-sm text-fg-primary ${bodyClassName || 'p-4'}`}
+        >
           {children}
         </div>
 

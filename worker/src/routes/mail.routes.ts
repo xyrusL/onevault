@@ -40,6 +40,48 @@ mailRoutes.post('/', async (c) => {
   return c.json(created, 201);
 });
 
+/** GET /api/mail/preferences */
+mailRoutes.get('/preferences', async (c) => {
+  try {
+    await c.env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS app_preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )`
+    ).run();
+    const row = await c.env.DB.prepare(
+      'SELECT value FROM app_preferences WHERE key = ?'
+    ).bind('mail_filters').first<{ value: string }>();
+    if (!row) return c.json({ preferences: null });
+    return c.json({ preferences: JSON.parse(row.value) });
+  } catch {
+    return c.json({ preferences: null });
+  }
+});
+
+/** POST /api/mail/preferences */
+mailRoutes.post('/preferences', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    await c.env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS app_preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      )`
+    ).run();
+    await c.env.DB.prepare(
+      `INSERT INTO app_preferences (key, value, updated_at)
+       VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value,
+         updated_at = excluded.updated_at`
+    ).bind('mail_filters', JSON.stringify(body)).run();
+  } catch {}
+  return c.json({ ok: true, preferences: body });
+});
+
 /** PATCH /api/mail/:id  { forwardTo, note } */
 mailRoutes.patch('/:id', async (c) => {
   const body = await c.req

@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ShieldCheck } from '@phosphor-icons/react';
 import { useTheme } from '../../../theme';
-import { getSimpleIconUrl } from '../utils/two-factor-icon.utils';
+import { getBrandIconCandidates } from '../utils/two-factor-icon.utils';
 
 interface TwoFactorIssuerIconProps {
   issuer: string;
@@ -16,14 +16,17 @@ export const TwoFactorIssuerIcon: React.FC<TwoFactorIssuerIconProps> = ({
 }) => {
   const { mode } = useTheme();
   const isDark = mode === 'dark';
-  const [hasError, setHasError] = useState(false);
 
-  const iconUrl = getSimpleIconUrl(issuer, isDark);
+  const iconCandidates = useMemo(
+    () => getBrandIconCandidates(issuer, isDark),
+    [issuer, isDark]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
 
   // Reset error state if the issuer changes
   useEffect(() => {
-    setHasError(false);
-  }, [issuer, isDark]);
+    setCandidateIndex(0);
+  }, [iconCandidates]);
 
   const sizeDimensions = {
     sm: { px: 13, cls: 'h-3.5 w-3.5' },
@@ -31,7 +34,10 @@ export const TwoFactorIssuerIcon: React.FC<TwoFactorIssuerIconProps> = ({
     lg: { px: 20, cls: 'h-5 w-5' },
   }[size];
 
-  if (!iconUrl || hasError) {
+  const currentIconUrl =
+    candidateIndex < iconCandidates.length ? iconCandidates[candidateIndex] : null;
+
+  if (!currentIconUrl) {
     return (
       <ShieldCheck
         size={sizeDimensions.px}
@@ -43,10 +49,10 @@ export const TwoFactorIssuerIcon: React.FC<TwoFactorIssuerIconProps> = ({
 
   return (
     <img
-      src={iconUrl}
+      src={currentIconUrl}
       alt={`${issuer} logo`}
       loading="lazy"
-      onError={() => setHasError(true)}
+      onError={() => setCandidateIndex((prev) => prev + 1)}
       className={`${sizeDimensions.cls} object-contain shrink-0 transition-opacity duration-150 ${className}`}
     />
   );

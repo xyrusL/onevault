@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTheme } from '../../../../theme';
-import { getSimpleIconUrl } from '../../../two-factor/utils/two-factor-icon.utils';
+import { getBrandIconCandidates } from '../../../two-factor/utils/two-factor-icon.utils';
 import { useServiceBadgeStyle } from '../../context/ServiceBadgeStyleContext';
 import { DetectedServiceTag } from '../../types/mail-service-detector.types';
 import type { ServiceBadgeStyle } from '../../types/mail.types';
@@ -27,12 +27,22 @@ export const MailServiceTagBadge: React.FC<MailServiceTagBadgeProps> = ({
   const { badgeStyle } = useServiceBadgeStyle();
   const activeStyle = styleOverride ?? badgeStyle;
 
-  const [hasIconError, setHasIconError] = useState(false);
-  const iconUrl = getSimpleIconUrl(tag.displayName || tag.name, isDark);
+  const iconCandidates = useMemo(
+    () => getBrandIconCandidates(tag.displayName || tag.name, isDark, tag.domain),
+    [tag.displayName, tag.name, isDark, tag.domain]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
 
   useEffect(() => {
-    setHasIconError(false);
-  }, [tag.displayName, tag.name, isDark]);
+    setCandidateIndex(0);
+  }, [iconCandidates]);
+
+  const currentIconUrl =
+    candidateIndex < iconCandidates.length ? iconCandidates[candidateIndex] : null;
+
+  const handleIconError = () => {
+    setCandidateIndex((prev) => prev + 1);
+  };
 
   const isSm = size === 'sm';
 
@@ -58,7 +68,7 @@ export const MailServiceTagBadge: React.FC<MailServiceTagBadgeProps> = ({
     }
   };
 
-  // 1. Icon Only Mode (Default requested by user)
+  // 1. Icon Only Mode (Default requested by user - forced square/squircle rounded-md)
   if (activeStyle === 'icon') {
     const hasCount = showCount && tag.matchedCount > 0;
     return (
@@ -68,7 +78,7 @@ export const MailServiceTagBadge: React.FC<MailServiceTagBadgeProps> = ({
         onClick={handleClick}
         onKeyDown={handleKeyDown}
         title={tooltip}
-        className={`inline-flex items-center justify-center rounded-full border transition-all duration-150 shrink-0 ${
+        className={`inline-flex items-center justify-center rounded-md border transition-all duration-150 shrink-0 ${
           isSm
             ? hasCount
               ? 'h-5 px-1.5 gap-1'
@@ -82,21 +92,21 @@ export const MailServiceTagBadge: React.FC<MailServiceTagBadgeProps> = ({
             : 'select-none'
         } ${isSelected ? 'ring-2 ring-sky-400/60 ring-offset-1 ring-offset-surface' : ''}`}
       >
-        {iconUrl && !hasIconError ? (
+        {currentIconUrl ? (
           <img
-            src={iconUrl}
+            src={currentIconUrl}
             alt={tag.displayName}
             loading="lazy"
-            onError={() => setHasIconError(true)}
+            onError={handleIconError}
             className={`${
               isSm ? 'h-2.5 w-2.5 max-h-2.5 max-w-2.5' : 'h-3.5 w-3.5 max-h-3.5 max-w-3.5'
-            } object-contain shrink-0`}
+            } object-contain shrink-0 rounded-[3px] overflow-hidden`}
           />
         ) : (
-          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tag.colorClass.dot}`} />
+          <span className={`h-1.5 w-1.5 rounded-xs shrink-0 ${tag.colorClass.dot}`} />
         )}
         {hasCount && (
-          <span className="rounded-full px-1 py-0 text-[9px] font-mono font-bold opacity-90 bg-black/25">
+          <span className="rounded px-1 py-0 text-[9px] font-mono font-bold opacity-90 bg-black/25">
             {tag.matchedCount}
           </span>
         )}
@@ -121,18 +131,18 @@ export const MailServiceTagBadge: React.FC<MailServiceTagBadgeProps> = ({
             : 'select-none'
         } ${isSelected ? 'ring-1 ring-sky-400/50' : ''}`}
       >
-        {iconUrl && !hasIconError ? (
+        {currentIconUrl ? (
           <img
-            src={iconUrl}
+            src={currentIconUrl}
             alt=""
             loading="lazy"
-            onError={() => setHasIconError(true)}
+            onError={handleIconError}
             className={`${
               isSm ? 'h-2.5 w-2.5 max-h-2.5 max-w-2.5' : 'h-3.5 w-3.5 max-h-3.5 max-w-3.5'
-            } object-contain shrink-0`}
+            } object-contain shrink-0 rounded-[3px] overflow-hidden`}
           />
         ) : (
-          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tag.colorClass.dot}`} />
+          <span className={`h-1.5 w-1.5 rounded-xs shrink-0 ${tag.colorClass.dot}`} />
         )}
         <span className="truncate font-semibold tracking-tight leading-none">
           {tag.displayName}

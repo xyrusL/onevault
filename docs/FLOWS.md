@@ -247,10 +247,47 @@ flowchart TD
     SummaryMap --> TableRow["MailAccountRow: Displays Service Badges + Activity Pulse Action Icon"]
     SummaryMap --> ActivityModal["User Clicks Activity Icon -> Opens MailAccountActivityModalContent"]
     
-    %% Inside Modal
     ActivityModal --> PurposeTags["Interactive Tag Filter Chips (All, GitHub, Supabase, Dribbble)"]
     ActivityModal --> FilteredFeed["Per-Email Inbound Activity Stream with FastForward Routing Badges"]
 ```
 
+---
 
+## 9. Local-First Debounced Batch Sync & Write Cycle
+How OneVault guarantees zero write lag (perceived 0ms response) while batching mutations and minimizing writes to preserve Cloudflare D1 free-tier quotas.
 
+```mermaid
+flowchart TD
+    UserEdit["User Performs Write Action (Notes, Mail Note, Forwarding Destination, Filter Preferences)"] --> Service["Domain Service Method (e.g. mailService.update, notesService.updateNote)"]
+
+    %% Local-First Optimistic Stage
+    Service --> Optimistic["Stage 1: Optimistic Local State (0ms Perceived Latency)"]
+    Optimistic --> ReactState["Update React In-Memory State (Instant UI Re-render)"]
+    Optimistic --> LocalCache["Update Domain localStorage Cache (e.g. onevault.mail.cache.v1)"]
+    Optimistic --> Enqueue["Enqueue to syncQueueService (Persisted in localStorage: onevault_pending_sync_queue)"]
+
+    %% Queue Merging & Deduplication
+    Enqueue --> Dedupe{"Does mutation key already exist in queue?"}
+    Dedupe -->|"Yes (e.g. rapid typing in note)"| Merge["Merge / Overwrite Payload by syncKey (Keeps Latest State)"]
+    Dedupe -->|"No"| NewEntry["Add New Mutation Entry to Queue"]
+
+    Merge & NewEntry --> ResetTimer["Reset Idle Debounce Timer (2500ms Window)"]
+
+    %% Flush Triggers
+    ResetTimer --> TriggerCheck{"Flush Trigger Occurs"}
+    TriggerCheck -->|"User goes idle for 2.5s"| Flush["Execute syncQueueService.flush()"]
+    TriggerCheck -->|"visibilitychange (User switches tab/minimizes)"| Flush
+    TriggerCheck -->|"beforeunload (User closes browser/window)"| Flush
+    TriggerCheck -->|"online (Network connection restored)"| Flush
+
+    %% Network Execution
+    Flush --> WorkerAPI["Call Cloudflare Worker API via direct fetch (apiClient / apiRequest)"]
+    WorkerAPI --> Endpoints["PATCH /api/mail/:id | POST /api/mail/preferences | PATCH /api/notes/:id"]
+    Endpoints --> D1["Consolidated Cloudflare D1 Database Write Transaction"]
+
+    %% Resolution & Cleanup
+    D1 --> Success{"Write Succeeded?"}
+    Success -->|"Yes"| RemoveQueue["Remove Mutation from Queue & Update localStorage"]
+    RemoveQueue --> SyncedState["Set Status: 'synced' -> 'idle'"]
+    Success -->|"Network Error"| Retry["Increment retryCount (Retries automatically on next idle or 'online' event)"]
+```

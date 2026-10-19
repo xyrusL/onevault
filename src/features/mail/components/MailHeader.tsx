@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowsDownUp,
+  CaretDown,
   Check,
   CloudCheck,
   Database,
@@ -81,12 +82,52 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
 
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const [openSubDropdown, setOpenSubDropdown] = useState<'sort' | 'domain' | 'service' | null>(null);
+  const [serviceSearchQuery, setServiceSearchQuery] = useState('');
 
   const isFilterActive =
     filters.status !== 'all' ||
     filters.activity !== 'all' ||
-    filters.domain !== 'all' ||
-    filters.service !== 'all';
+    (filters.domains && filters.domains.length > 0) ||
+    (filters.services && filters.services.length > 0);
+
+  const toggleDomain = (dom: string) => {
+    const current = filters.domains || [];
+    const lower = dom.toLowerCase();
+    const exists = current.some((d) => d.toLowerCase() === lower);
+    const updated = exists
+      ? current.filter((d) => d.toLowerCase() !== lower)
+      : [...current, dom];
+    onFilterChange?.({ ...filters, domains: updated });
+  };
+
+  const domainLabel =
+    !filters.domains || filters.domains.length === 0
+      ? 'All Domains'
+      : filters.domains.length === 1
+        ? `@${filters.domains[0]}`
+        : `${filters.domains.length} Domains`;
+
+  const toggleService = (svc: string) => {
+    const current = filters.services || [];
+    const lower = svc.toLowerCase();
+    const exists = current.some((s) => s.toLowerCase() === lower);
+    const updated = exists
+      ? current.filter((s) => s.toLowerCase() !== lower)
+      : [...current, svc];
+    onFilterChange?.({ ...filters, services: updated });
+  };
+
+  const serviceLabel =
+    !filters.services || filters.services.length === 0
+      ? 'All Services'
+      : filters.services.length === 1
+        ? filters.services[0]
+        : `${filters.services.length} Services`;
+
+  const filteredServices = availableServices.filter((svc) =>
+    svc.toLowerCase().includes(serviceSearchQuery.toLowerCase().trim())
+  );
 
   const hasUnreadActivity = unreadActivityCount > 0;
 
@@ -315,219 +356,389 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
               </button>
             </div>
 
-            {/* Filter & Sort Popover Dropdown */}
+            {/* Filter & Sort Compact Square Popover */}
             {isFilterMenuOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-72 rounded-xl border border-default bg-surface-solid/95 backdrop-blur-md p-3 shadow-2xl z-50 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-100 max-h-[85vh] overflow-y-auto">
-                <div className="flex items-center justify-between pb-2 border-b border-default">
+              <div className="absolute right-0 top-full mt-1.5 w-[330px] sm:w-[350px] rounded-2xl border border-default bg-surface-solid/98 backdrop-blur-md p-3 shadow-2xl z-50 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-100">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-1.5 border-b border-default">
                   <div className="flex items-center gap-1.5">
                     <Funnel size={13} weight="bold" className="text-sky-400" />
                     <span className="text-xs font-semibold text-fg-primary">
                       Filters & Sort
                     </span>
                   </div>
-                  {(isFilterActive || (sortOrder && sortOrder !== 'newest')) && (
+                  <div className="flex items-center gap-2">
+                    {(isFilterActive || (sortOrder && sortOrder !== 'newest')) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onFilterChange?.(DEFAULT_MAIL_FILTERS);
+                          onSortOrderChange?.('newest');
+                          setOpenSubDropdown(null);
+                        }}
+                        className="text-[11px] font-medium text-sky-400 hover:text-sky-300 transition-colors cursor-pointer mr-0.5"
+                      >
+                        Reset all
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
-                        onFilterChange?.(DEFAULT_MAIL_FILTERS);
-                        onSortOrderChange?.('newest');
+                        setIsFilterMenuOpen(false);
+                        setOpenSubDropdown(null);
                       }}
-                      className="text-[11px] font-medium text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                      title="Close filters"
+                      aria-label="Close filters"
+                      className="inline-flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:text-fg-primary hover:bg-elevated transition-colors cursor-pointer"
                     >
-                      Reset all
+                      <X size={13} weight="bold" />
                     </button>
-                  )}
+                  </div>
                 </div>
 
-                {/* Sort Order */}
-                {viewMode !== 'activity' && onSortOrderChange && (
-                  <div className="flex flex-col gap-1.5">
+                {/* Row 1: Sort By + Routing Status (2 Columns) */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Sort By Dropdown */}
+                  <div className="relative flex flex-col gap-1">
                     <span className="flex items-center gap-1 text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
                       <ArrowsDownUp size={11} weight="bold" />
                       <span>Sort By</span>
                     </span>
-                    <div className="grid grid-cols-2 gap-1">
-                      {SORT_OPTIONS.map((opt) => {
-                        const isSelected = sortOrder === opt.value;
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSubDropdown(openSubDropdown === 'sort' ? null : 'sort')
+                      }
+                      className="w-full h-8 flex items-center justify-between px-2.5 rounded-lg border border-default bg-surface hover:bg-elevated text-xs font-medium text-fg-primary transition-colors cursor-pointer"
+                    >
+                      <span className="truncate">
+                        {SORT_OPTIONS.find((o) => o.value === sortOrder)?.label || 'Newest'}
+                      </span>
+                      <CaretDown
+                        size={11}
+                        className={`text-fg-muted shrink-0 transition-transform ${
+                          openSubDropdown === 'sort' ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {openSubDropdown === 'sort' && (
+                      <div className="absolute top-full left-0 mt-1 w-full rounded-xl border border-default bg-surface-solid p-1 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                        {SORT_OPTIONS.map((opt) => {
+                          const isSelected = sortOrder === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                onSortOrderChange?.(opt.value);
+                                setOpenSubDropdown(null);
+                              }}
+                              className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-xs font-medium transition-colors text-left cursor-pointer ${
+                                isSelected
+                                  ? 'bg-sky-500/15 text-sky-300 font-semibold'
+                                  : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                              }`}
+                            >
+                              <span className="truncate">{opt.label}</span>
+                              {isSelected && (
+                                <Check size={11} weight="bold" className="text-sky-400 shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Routing Status Segmented */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                      Routing Status
+                    </span>
+                    <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-lg bg-surface border border-default h-8 items-center">
+                      {[
+                        { value: 'all', label: 'All' },
+                        { value: 'forwarding', label: 'Fwd' },
+                        { value: 'vault', label: 'Vault' },
+                      ].map((opt) => {
+                        const isSelected = filters.status === opt.value;
                         return (
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => onSortOrderChange(opt.value)}
-                            className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left cursor-pointer border ${
+                            onClick={() => {
+                              onFilterChange?.({
+                                ...filters,
+                                status: opt.value as MailStatusFilter,
+                              });
+                              setOpenSubDropdown(null);
+                            }}
+                            className={`h-full text-[10px] font-medium rounded flex items-center justify-center transition-all cursor-pointer ${
                               isSelected
-                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                                ? 'bg-elevated text-sky-400 shadow-xs font-semibold'
+                                : 'text-fg-secondary hover:text-fg-primary'
                             }`}
                           >
-                            <span className="truncate">{opt.label}</span>
-                            {isSelected && (
-                              <Check size={12} weight="bold" className="text-sky-400 shrink-0" />
-                            )}
+                            {opt.label}
                           </button>
                         );
                       })}
                     </div>
-                  </div>
-                )}
-
-                {/* Status / Forwarding Filter */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
-                    Routing Status
-                  </span>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[
-                      { value: 'all', label: 'All' },
-                      { value: 'forwarding', label: 'Forwarding' },
-                      { value: 'vault', label: 'Vault Only' },
-                    ].map((opt) => {
-                      const isSelected = filters.status === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() =>
-                            onFilterChange?.({
-                              ...filters,
-                              status: opt.value as MailStatusFilter,
-                            })
-                          }
-                          className={`px-2 py-1.5 rounded-lg text-xs font-medium text-center transition-all cursor-pointer border ${
-                            isSelected
-                              ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                              : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
 
-                {/* Activity / Messages Filter */}
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
-                    Activity Messages
-                  </span>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[
-                      { value: 'all', label: 'All' },
-                      { value: 'with-activity', label: 'Active' },
-                      { value: 'no-activity', label: 'Empty' },
-                    ].map((opt) => {
-                      const isSelected = filters.activity === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() =>
-                            onFilterChange?.({
-                              ...filters,
-                              activity: opt.value as MailActivityFilter,
-                            })
-                          }
-                          className={`px-2 py-1.5 rounded-lg text-xs font-medium text-center transition-all cursor-pointer border ${
-                            isSelected
-                              ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                              : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                          }`}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
+                {/* Row 2: Activity Messages + Domains Dropdown (2 Columns) */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Activity Messages Segmented */}
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                      Activity
+                    </span>
+                    <div className="grid grid-cols-3 gap-0.5 p-0.5 rounded-lg bg-surface border border-default h-8 items-center">
+                      {[
+                        { value: 'all', label: 'All' },
+                        { value: 'with-activity', label: 'Active' },
+                        { value: 'no-activity', label: 'Empty' },
+                      ].map((opt) => {
+                        const isSelected = filters.activity === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              onFilterChange?.({
+                                ...filters,
+                                activity: opt.value as MailActivityFilter,
+                              });
+                              setOpenSubDropdown(null);
+                            }}
+                            className={`h-full text-[10px] font-medium rounded flex items-center justify-center transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-elevated text-sky-400 shadow-xs font-semibold'
+                                : 'text-fg-secondary hover:text-fg-primary'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Domain Dropdown (Multi-Select) */}
+                  <div className="relative flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                        Domain
+                      </span>
+                      {filters.domains && filters.domains.length > 0 && (
+                        <span className="text-[9px] font-mono text-sky-400 font-semibold">
+                          {filters.domains.length}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpenSubDropdown(openSubDropdown === 'domain' ? null : 'domain')
+                      }
+                      className={`w-full h-8 flex items-center justify-between px-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                        filters.domains && filters.domains.length > 0
+                          ? 'border-sky-500/40 bg-sky-500/10 text-sky-300'
+                          : 'border-default bg-surface hover:bg-elevated text-fg-primary'
+                      }`}
+                    >
+                      <span className="truncate">{domainLabel}</span>
+                      <CaretDown
+                        size={11}
+                        className={`text-fg-muted shrink-0 transition-transform ${
+                          openSubDropdown === 'domain' ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {openSubDropdown === 'domain' && (
+                      <div className="absolute top-full right-0 mt-1 w-52 rounded-xl border border-default bg-surface-solid p-1.5 shadow-2xl z-50 flex flex-col gap-1 max-h-48 overflow-y-auto animate-in fade-in zoom-in-95 duration-100">
+                        <div className="flex items-center justify-between px-1.5 py-0.5 text-[10px] font-semibold border-b border-default text-fg-muted">
+                          <span>Select Domains</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onFilterChange?.({ ...filters, domains: [] })}
+                              className="text-sky-400 hover:text-sky-300 cursor-pointer"
+                            >
+                              All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOpenSubDropdown(null)}
+                              className="p-0.5 text-fg-muted hover:text-fg-primary hover:bg-elevated rounded cursor-pointer transition-colors"
+                              title="Close domains list"
+                            >
+                              <X size={11} weight="bold" />
+                            </button>
+                          </div>
+                        </div>
+                        {availableDomains.map((dom) => {
+                          const isChecked = filters.domains?.some(
+                            (d) => d.toLowerCase() === dom.toLowerCase()
+                          );
+                          return (
+                            <button
+                              key={dom}
+                              type="button"
+                              onClick={() => toggleDomain(dom)}
+                              className={`w-full flex items-center gap-2 px-1.5 py-1 rounded-md text-xs transition-colors text-left cursor-pointer ${
+                                isChecked
+                                  ? 'bg-sky-500/15 text-sky-300 font-medium'
+                                  : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                              }`}
+                            >
+                              <div
+                                className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${
+                                  isChecked
+                                    ? 'bg-sky-500 border-sky-400 text-white'
+                                    : 'border-default bg-surface'
+                                }`}
+                              >
+                                {isChecked && <Check size={10} weight="bold" />}
+                              </div>
+                              <span className="truncate">@{dom}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Domain Filter (if multiple domains available) */}
-                {availableDomains && availableDomains.length > 1 && (
-                  <div className="flex flex-col gap-1.5">
+                {/* Row 3: Detected Services Dropdown (Multi-Select + Searchable) */}
+                <div className="relative flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
                     <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
-                      Domain
+                      Detected Services
                     </span>
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
-                      <button
-                        type="button"
-                        onClick={() => onFilterChange?.({ ...filters, domain: 'all' })}
-                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
-                          filters.domain === 'all'
-                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                            : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                        }`}
-                      >
-                        All Domains
-                      </button>
-                      {availableDomains.map((dom) => {
-                        const isSelected = filters.domain.toLowerCase() === dom.toLowerCase();
-                        return (
-                          <button
-                            key={dom}
-                            type="button"
-                            onClick={() =>
-                              onFilterChange?.({
-                                ...filters,
-                                domain: isSelected ? 'all' : dom,
-                              })
-                            }
-                            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
-                              isSelected
-                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                            }`}
-                          >
-                            @{dom}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {filters.services && filters.services.length > 0 && (
+                      <span className="text-[9px] font-mono text-sky-400 font-semibold">
+                        {filters.services.length} selected
+                      </span>
+                    )}
                   </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenSubDropdown(openSubDropdown === 'service' ? null : 'service')
+                    }
+                    className={`w-full h-8 flex items-center justify-between px-2.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
+                      filters.services && filters.services.length > 0
+                        ? 'border-sky-500/40 bg-sky-500/10 text-sky-300'
+                        : 'border-default bg-surface hover:bg-elevated text-fg-primary'
+                    }`}
+                  >
+                    <span className="truncate">{serviceLabel}</span>
+                    <CaretDown
+                      size={11}
+                      className={`text-fg-muted shrink-0 transition-transform ${
+                        openSubDropdown === 'service' ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
 
-                {/* Service Tag Filter (if tags available) */}
-                {availableServices && availableServices.length > 0 && (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
-                      Detected Service
-                    </span>
-                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
-                      <button
-                        type="button"
-                        onClick={() => onFilterChange?.({ ...filters, service: 'all' })}
-                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
-                          filters.service === 'all'
-                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                            : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                        }`}
-                      >
-                        All Services
-                      </button>
-                      {availableServices.map((svc) => {
-                        const isSelected = filters.service.toLowerCase() === svc.toLowerCase();
-                        return (
+                  {openSubDropdown === 'service' && (
+                    <div className="absolute bottom-full left-0 mb-1 w-full rounded-xl border border-default bg-surface-solid p-1.5 shadow-2xl z-50 flex flex-col gap-1.5 animate-in fade-in zoom-in-95 duration-100">
+                      {/* Header with Close X */}
+                      <div className="flex items-center justify-between px-1.5 py-0.5 text-[10px] font-semibold border-b border-default text-fg-muted">
+                        <span>Select Services</span>
+                        <div className="flex items-center gap-1.5">
                           <button
-                            key={svc}
                             type="button"
-                            onClick={() =>
-                              onFilterChange?.({
-                                ...filters,
-                                service: isSelected ? 'all' : svc,
-                              })
-                            }
-                            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
-                              isSelected
-                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
-                            }`}
+                            onClick={() => onFilterChange?.({ ...filters, services: [] })}
+                            className="text-sky-400 hover:text-sky-300 cursor-pointer"
                           >
-                            {svc}
+                            All
                           </button>
-                        );
-                      })}
+                          <button
+                            type="button"
+                            onClick={() => setOpenSubDropdown(null)}
+                            className="p-0.5 text-fg-muted hover:text-fg-primary hover:bg-elevated rounded cursor-pointer transition-colors"
+                            title="Close services list"
+                          >
+                            <X size={11} weight="bold" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Searchable input for services */}
+                      <div className="relative flex items-center px-0.5">
+                        <MagnifyingGlass
+                          size={12}
+                          className="absolute left-2.5 text-fg-muted pointer-events-none"
+                        />
+                        <input
+                          type="text"
+                          value={serviceSearchQuery}
+                          onChange={(e) => setServiceSearchQuery(e.target.value)}
+                          placeholder="Search services..."
+                          className="w-full h-7 pl-6.5 pr-6 text-xs bg-surface border border-default rounded-md text-fg-primary placeholder:text-fg-muted/60 focus:outline-none focus:border-sky-500/50"
+                          autoFocus
+                        />
+                        {serviceSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setServiceSearchQuery('')}
+                            className="absolute right-2 p-0.5 text-fg-muted hover:text-fg-primary cursor-pointer"
+                            title="Clear search"
+                          >
+                            <X size={10} weight="bold" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Filtered Services List */}
+                      <div className="flex flex-col gap-1 max-h-36 overflow-y-auto px-0.5">
+                        {availableServices.length === 0 ? (
+                          <div className="px-2 py-1.5 text-xs text-fg-muted">
+                            No service tags detected yet
+                          </div>
+                        ) : filteredServices.length === 0 ? (
+                          <div className="px-2 py-2 text-center text-[11px] text-fg-muted">
+                            No services match &ldquo;{serviceSearchQuery}&rdquo;
+                          </div>
+                        ) : (
+                          filteredServices.map((svc) => {
+                            const isChecked = filters.services?.some(
+                              (s) => s.toLowerCase() === svc.toLowerCase()
+                            );
+                            return (
+                              <button
+                                key={svc}
+                                type="button"
+                                onClick={() => toggleService(svc)}
+                                className={`w-full flex items-center gap-2 px-1.5 py-1 rounded-md text-xs transition-colors text-left cursor-pointer ${
+                                  isChecked
+                                    ? 'bg-sky-500/15 text-sky-300 font-medium'
+                                    : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                                }`}
+                              >
+                                <div
+                                  className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${
+                                    isChecked
+                                      ? 'bg-sky-500 border-sky-400 text-white'
+                                      : 'border-default bg-surface'
+                                  }`}
+                                >
+                                  {isChecked && <Check size={10} weight="bold" />}
+                                </div>
+                                <span className="truncate">{svc}</span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>

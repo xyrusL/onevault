@@ -15,6 +15,7 @@ import { MailActivityItem } from '../../types/mail-inbox.types';
 import { AccountServiceDetectionSummary } from '../../types/mail-service-detector.types';
 import { isVaultDestination, MailAccountItem } from '../../types/mail.types';
 import { MailServiceTagBadge } from './MailServiceTagBadge';
+import { MailActivityTipsBox } from './MailActivityTipsBox';
 import { resolveSubdomainTheme } from '../SubdomainIcon';
 
 interface MailAccountActivityModalContentProps {
@@ -72,11 +73,11 @@ export const MailAccountActivityModalContent: React.FC<
   }, [activityItems, selectedTagId, tags]);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 space-y-3 sm:space-y-3.5">
       {/* ─────────────────────────────────────────────────────────────
        * 1. EMAIL METADATA HEADER CARD
        * ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-default bg-elevated/70 p-3.5 space-y-2.5">
+      <div className="shrink-0 rounded-xl border border-default bg-elevated/70 p-3.5 space-y-2.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-400">
@@ -168,7 +169,7 @@ export const MailAccountActivityModalContent: React.FC<
       {/* ─────────────────────────────────────────────────────────────
        * 2. GENERATED TAGS PANEL
        * ───────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-default bg-surface-solid p-3.5 space-y-2.5">
+      <div className="shrink-0 rounded-xl border border-default bg-surface-solid p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Tag size={14} weight="bold" className="text-sky-400" />
@@ -188,53 +189,48 @@ export const MailAccountActivityModalContent: React.FC<
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* "All" Filter chip */}
-              <button
-                type="button"
-                onClick={() => setSelectedTagId(null)}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors cursor-pointer ${
-                  selectedTagId === null
-                    ? 'bg-elevated border-strong text-fg-primary shadow-xs'
-                    : 'bg-surface border-default text-fg-muted hover:text-fg-secondary'
-                }`}
-              >
-                <span>All Services</span>
-                <span className="font-mono text-[10px] opacity-75">
-                  ({activityItems.length})
-                </span>
-              </button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* "All" Filter chip */}
+            <button
+              type="button"
+              onClick={() => setSelectedTagId(null)}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium border transition-colors cursor-pointer ${
+                selectedTagId === null
+                  ? 'bg-elevated border-strong text-fg-primary shadow-xs'
+                  : 'bg-surface border-default text-fg-muted hover:text-fg-secondary'
+              }`}
+            >
+              <span>All Services</span>
+              <span className="font-mono text-[10px] opacity-75">
+                ({activityItems.length})
+              </span>
+            </button>
 
-              {/* Tag Badges with interactive filtering */}
-              {tags.map((tag) => (
-                <MailServiceTagBadge
-                  key={tag.id}
-                  tag={tag}
-                  size="md"
-                  showCount
-                  isSelected={selectedTagId === tag.id}
-                  onClick={(t) =>
-                    setSelectedTagId((prev) => (prev === t.id ? null : t.id))
-                  }
-                />
-              ))}
-            </div>
-
-            <p className="text-[11px] text-fg-muted leading-relaxed">
-              💡 {tags.length === 1 ? '1 service detected' : `${tags.length} services detected`} for this alias.
-              You can search <strong className="text-sky-300 font-mono">"{tags[0].name.toLowerCase()}"</strong> anywhere
-              in OneVault to quickly find this address.
-            </p>
+            {/* Tag Badges with interactive filtering */}
+            {tags.map((tag) => (
+              <MailServiceTagBadge
+                key={tag.id}
+                tag={tag}
+                size="md"
+                showCount
+                isSelected={selectedTagId === tag.id}
+                onClick={(t) =>
+                  setSelectedTagId((prev) => (prev === t.id ? null : t.id))
+                }
+              />
+            ))}
           </div>
         )}
+
+        {/* Squared Box for Notes or Tips with Auto-Rotation */}
+        <MailActivityTipsBox tags={tags} />
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
        * 3. INCOMING EMAIL ACTIVITY STREAM
        * ───────────────────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2 px-1">
+      <div className="flex-1 min-h-0 flex flex-col space-y-2">
+        <div className="shrink-0 flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-fg-muted">
             <Tray size={14} weight="duotone" />
             <span>
@@ -254,7 +250,7 @@ export const MailAccountActivityModalContent: React.FC<
         </div>
 
         {filteredActivities.length === 0 ? (
-          <div className="rounded-xl border border-default bg-surface p-8 text-center text-xs text-fg-muted">
+          <div className="rounded-xl border border-default bg-surface p-6 sm:p-8 text-center text-xs text-fg-muted">
             <EnvelopeSimple size={24} weight="duotone" className="mx-auto mb-2 text-fg-subtle" />
             <p className="font-medium text-fg-secondary">No inbound activity recorded yet</p>
             <p className="mt-1 text-[11px] text-fg-subtle max-w-sm mx-auto">
@@ -263,7 +259,7 @@ export const MailAccountActivityModalContent: React.FC<
             </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-default bg-surface-solid divide-y divide-subtle overflow-hidden max-h-[340px] overflow-y-auto">
+          <div className="flex-1 min-h-[140px] max-h-[340px] sm:max-h-[380px] rounded-xl border border-default bg-surface-solid divide-y divide-subtle overflow-y-auto">
             {filteredActivities.map((act) => {
               const isActVault = isVaultDestination(act.forwardTo);
               const isUnread = !act.isRead;
@@ -345,7 +341,7 @@ export const MailAccountActivityModalContent: React.FC<
       {/* ─────────────────────────────────────────────────────────────
        * 4. MODAL FOOTER
        * ───────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-subtle">
+      <div className="shrink-0 flex items-center justify-end gap-2 pt-2 border-t border-subtle">
         <button
           type="button"
           onClick={onClose}

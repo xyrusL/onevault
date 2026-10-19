@@ -54,6 +54,9 @@ worker/
 ### 2. Mail API (`/api/mail`)
 - **`GET /api/mail`**: Lists mail accounts, forwarding destinations, and received message counts.
 - **`POST /api/mail`**: Provisions a new custom email routing address (`name@domain.com`). Creates an Email Routing rule via Cloudflare API.
+- **`PATCH /api/mail/:id`**: Updates forwarding destination or note for a mailbox. Batched automatically via Local-First Debounced Sync.
+- **`GET /api/mail/preferences`**: Retrieves cloud-persisted user filter preferences from D1 `app_preferences`.
+- **`POST /api/mail/preferences`**: Saves user filter preferences in D1 `app_preferences`. Enqueued automatically via `apiClient.syncPost()`.
 - **`GET /api/mail/messages`**: Retrieves inbound emails captured by Direct Vault Inboxes (mailboxes with forwarding set to `None`).
 - **`GET /api/mail/activity`**: Retrieves combined Cloudflare GraphQL adaptive email routing logs and D1 SQLite message telemetry.
 - **`DELETE /api/mail/:id`**: Deletes a mailbox and its corresponding Cloudflare Email Routing rule.
@@ -137,6 +140,13 @@ CREATE TABLE IF NOT EXISTS received_messages (
   received_at TEXT NOT NULL,
   is_read INTEGER DEFAULT 0,
   FOREIGN KEY (account_id) REFERENCES mail_accounts(id) ON DELETE CASCADE
+);
+
+-- App Preferences Table (Cloud sync for filter & UI states)
+CREATE TABLE IF NOT EXISTS app_preferences (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 ```
 

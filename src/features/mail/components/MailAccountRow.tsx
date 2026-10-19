@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
   ArrowBendUpRight,
-  CaretRight,
   Check,
   Copy,
   FileText,
+  Info,
   Minus,
   PaperPlaneTilt,
   Pulse,
@@ -112,7 +112,7 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                           e.stopPropagation();
                           onOpenActivity ? onOpenActivity(item) : onSelect(item);
                         }}
-                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-full text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary cursor-pointer transition-colors"
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-md text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary cursor-pointer transition-colors"
                       >
                         +{summary.tags.length - 2}
                       </button>
@@ -172,23 +172,11 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                 <PaperPlaneTilt size={9} weight="duotone" className="shrink-0 text-emerald-400/70" />
               </span>
             )}
-            {item.note && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenNote ? onOpenNote(item) : onSelect(item);
-                }}
-                aria-label="NotePad"
-                className="inline-flex items-center justify-center h-4.5 w-4.5 rounded border border-default bg-elevated text-fg-secondary hover:text-fg-primary text-[10px] leading-none shrink-0 cursor-pointer"
-              >
-                <FileText size={10} weight="bold" />
-              </button>
-            )}
+            {/* Note indicator has been moved to the action buttons cluster */}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Activity Action Button (fixed uniform width + balanced icon if no activity) */}
+            {/* 1. Activity Action Button (fixed uniform width, icon-only representation) */}
             <button
               type="button"
               onClick={(e) => {
@@ -200,30 +188,43 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                   ? `View Activity & Generated Tags (${activityCount})`
                   : 'No activity yet'
               }
-              className="w-[88px] inline-flex items-center justify-between gap-1 rounded border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2 py-0.5 text-[11px] font-medium text-fg-secondary hover:text-fg-primary transition-colors cursor-pointer"
+              className="w-[46px] h-6 inline-flex items-center justify-center gap-1 rounded border border-default bg-elevated hover:bg-surface-solid hover:border-strong text-[11px] font-medium transition-colors cursor-pointer shrink-0"
             >
-              <div className="flex items-center gap-1 min-w-0">
-                <Pulse
-                  size={11}
-                  weight="bold"
-                  className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
-                />
-                <span className="truncate">Activity</span>
-              </div>
+              <Pulse
+                size={11}
+                weight="bold"
+                className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
+              />
               {hasActivity ? (
-                <span className="min-w-3.5 text-center rounded-full bg-surface-solid border border-default px-1 py-0 text-[9px] font-mono leading-tight text-fg-secondary shrink-0">
-                  {activityCount}
+                <span className="w-4 text-center font-mono text-[10px] tabular-nums font-semibold text-fg-primary shrink-0">
+                  {activityCount > 99 ? '99+' : activityCount}
                 </span>
               ) : (
-                <span
-                  title="No activity yet"
-                  className="min-w-3.5 inline-flex items-center justify-center rounded-full border border-dashed border-default/60 px-1 py-0 text-[8px] font-mono leading-tight text-fg-muted/60 shrink-0"
-                >
+                <span className="w-4 inline-flex items-center justify-center text-fg-muted/50 shrink-0">
                   <Minus size={8} weight="bold" />
                 </span>
               )}
             </button>
 
+            {/* 2. Notes Button (purple when present, gray when empty) */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenNote ? onOpenNote(item) : onSelect(item);
+              }}
+              title={item.note ? `Note: ${item.note}` : 'No note yet (click to add)'}
+              aria-label={item.note ? 'View note' : 'Add note'}
+              className={`w-6 h-6 inline-flex items-center justify-center rounded border transition-colors cursor-pointer shrink-0 ${
+                item.note
+                  ? 'border-purple-500/35 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 shadow-xs'
+                  : 'border-default/60 bg-elevated/40 text-fg-muted/40 hover:text-fg-secondary hover:bg-elevated hover:border-default'
+              }`}
+            >
+              <FileText size={11} weight={item.note ? 'fill' : 'regular'} />
+            </button>
+
+            {/* Inbox Action (only for Vault) */}
             {isVault && (
               <button
                 type="button"
@@ -232,23 +233,25 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                   onOpenInbox(item);
                 }}
                 title="Open Vault Inbox"
-                className="inline-flex items-center gap-1 rounded border border-cyan-500/35 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-medium text-cyan-300 hover:bg-cyan-500/25 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 rounded border border-cyan-500/35 bg-cyan-500/15 px-2 h-6 text-[11px] font-medium text-cyan-300 hover:bg-cyan-500/25 transition-colors cursor-pointer shrink-0"
               >
                 <Tray size={11} weight="duotone" />
                 <span>Inbox</span>
               </button>
             )}
 
+            {/* 3. Details Button (icon only - Info) */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(item);
               }}
-              className="inline-flex items-center gap-0.5 rounded border border-default bg-elevated px-2 py-0.5 text-[11px] font-medium text-fg-secondary hover:text-fg-primary hover:border-strong hover:bg-surface-solid transition-colors cursor-pointer"
+              title="Account info & details"
+              aria-label="Account info & details"
+              className="w-6 h-6 inline-flex items-center justify-center rounded border border-default bg-elevated text-fg-secondary hover:text-fg-primary hover:border-strong hover:bg-surface-solid transition-colors cursor-pointer shrink-0"
             >
-              <span>Details</span>
-              <CaretRight size={10} weight="bold" />
+              <Info size={11} weight="bold" />
             </button>
           </div>
         </div>
@@ -290,20 +293,6 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
               )}
             </button>
 
-            {item.note && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenNote ? onOpenNote(item) : onSelect(item);
-                }}
-                aria-label="NotePad"
-                className="inline-flex items-center justify-center h-5 w-5 rounded-md border border-default bg-elevated text-fg-secondary hover:text-fg-primary hover:border-strong transition-colors cursor-pointer shrink-0"
-              >
-                <FileText size={12} weight="bold" />
-              </button>
-            )}
-
             {/* Generated Service Tag Badges */}
             {summary && summary.tags.length > 0 && (
               <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -328,7 +317,7 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                           .slice(2)
                           .map((t) => t.displayName)
                           .join(', ')}`}
-                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-full text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary hover:border-default cursor-pointer transition-colors"
+                        className="inline-flex h-5 px-1.5 items-center justify-center rounded-md text-[9px] font-mono font-bold leading-none bg-elevated border border-subtle text-fg-muted hover:text-fg-primary hover:border-default cursor-pointer transition-colors"
                       >
                         +{summary.tags.length - 2}
                       </button>
@@ -388,9 +377,9 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
           )}
         </div>
 
-        {/* Column 3: Activity + Inbox (only for Vault) + Details Actions */}
+        {/* Column 3: Activity + Notes + Inbox (only for Vault) + Details Actions */}
         <div className="sm:col-span-3 flex items-center justify-end gap-1.5">
-          {/* Activity Action Button (fixed uniform width + balanced icon if no activity) */}
+          {/* 1. Activity Action Button (fixed uniform width, icon-only representation) */}
           <button
             type="button"
             onClick={(e) => {
@@ -402,30 +391,43 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                 ? `View Inbound Activity & Generated Service Tags (${activityCount})`
                 : 'No inbound activity yet'
             }
-            className="w-[98px] inline-flex items-center justify-between gap-1.5 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2.5 py-1 text-xs font-medium text-fg-secondary hover:text-fg-primary transition-all duration-200 cursor-pointer"
+            className="w-[52px] h-7 inline-flex items-center justify-center gap-1.5 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong text-xs font-medium transition-all duration-200 cursor-pointer shrink-0"
           >
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Pulse
-                size={12}
-                weight="bold"
-                className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
-              />
-              <span className="leading-none text-xs">Activity</span>
-            </div>
+            <Pulse
+              size={12}
+              weight="bold"
+              className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
+            />
             {hasActivity ? (
-              <span className="min-w-4 text-center rounded-full bg-surface-solid border border-default px-1.5 py-0 text-[10px] font-mono leading-tight text-fg-secondary shrink-0">
-                {activityCount}
+              <span className="w-5 text-center font-mono text-xs tabular-nums font-semibold text-fg-primary shrink-0">
+                {activityCount > 99 ? '99+' : activityCount}
               </span>
             ) : (
-              <span
-                title="No activity yet"
-                className="min-w-4 inline-flex items-center justify-center rounded-full border border-dashed border-default/60 px-1 py-0 text-[9px] font-mono leading-tight text-fg-muted/60 shrink-0"
-              >
+              <span className="w-5 inline-flex items-center justify-center text-fg-muted/50 shrink-0">
                 <Minus size={9} weight="bold" />
               </span>
             )}
           </button>
 
+          {/* 2. Notes Button (purple when present, gray when empty) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenNote ? onOpenNote(item) : onSelect(item);
+            }}
+            title={item.note ? `Note: ${item.note}` : 'No note yet (click to add note)'}
+            aria-label={item.note ? 'View or edit note' : 'Add note'}
+            className={`w-7 h-7 inline-flex items-center justify-center rounded-md border transition-all duration-200 cursor-pointer shrink-0 ${
+              item.note
+                ? 'border-purple-500/35 bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 shadow-xs'
+                : 'border-default/60 bg-elevated/40 text-fg-muted/40 hover:text-fg-secondary hover:bg-elevated hover:border-default'
+            }`}
+          >
+            <FileText size={13} weight={item.note ? 'fill' : 'regular'} />
+          </button>
+
+          {/* Inbox Action (only for Vault) */}
           {isVault && (
             <button
               type="button"
@@ -434,26 +436,27 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
                 onOpenInbox(item);
               }}
               title="Open Vault Inbox"
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2.5 py-1 text-xs font-medium text-fg-secondary hover:text-fg-primary transition-all duration-200 cursor-pointer"
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2.5 h-7 text-xs font-medium text-fg-secondary hover:text-fg-primary transition-all duration-200 cursor-pointer shrink-0"
             >
               <Tray size={12} weight="duotone" className="text-accent" />
               <span className="leading-none text-fg-primary">Inbox</span>
             </button>
           )}
 
+          {/* 3. Details Button (icon only - Info) */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onSelect(item);
             }}
-            className="inline-flex items-center justify-center gap-1 rounded-md border border-default bg-elevated px-2.5 py-1 text-xs font-medium text-fg-secondary group-hover:border-strong group-hover:bg-surface-solid group-hover:text-fg-primary transition-all duration-200 cursor-pointer"
+            title="Account info & details"
+            aria-label="Account info & details"
+            className="w-7 h-7 inline-flex items-center justify-center rounded-md border border-default bg-elevated text-fg-secondary group-hover:border-strong group-hover:bg-surface-solid group-hover:text-fg-primary hover:text-fg-primary hover:border-strong transition-all duration-200 cursor-pointer shrink-0"
           >
-            <span className="leading-none">Details</span>
-            <CaretRight
-              size={11}
+            <Info
+              size={13}
               weight="bold"
-              className="transition-transform duration-200 group-hover:translate-x-0.5"
             />
           </button>
         </div>

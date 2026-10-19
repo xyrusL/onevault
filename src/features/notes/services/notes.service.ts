@@ -1,4 +1,4 @@
-import { apiRequest } from '../../../shared/services/api-client.service';
+import { apiClient, apiRequest } from '../../../shared/services/api-client.service';
 import type {
   CreateFolderPayload,
   CreateNotePayload,
@@ -78,12 +78,22 @@ export const notesService = {
   },
 
   async updateFolder(id: string, payload: UpdateFolderPayload): Promise<NoteFolder> {
-    const updated = await apiRequest<NoteFolder>(`/notes/folders/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: payload,
-    });
     const current = memoryFolders ?? [];
-    persistFolders(current.map((f) => (f.id === id ? updated : f)));
+    const existing = current.find((f) => f.id === id);
+    const updated: NoteFolder = existing
+      ? { ...existing, ...payload }
+      : ({} as NoteFolder);
+
+    if (existing) {
+      persistFolders(current.map((f) => (f.id === id ? updated : f)));
+    }
+
+    await apiClient.syncPatch<NoteFolder>(
+      `/notes/folders/${encodeURIComponent(id)}`,
+      payload,
+      `note_folder_${id}`,
+      updated
+    );
     return updated;
   },
 
@@ -148,12 +158,22 @@ export const notesService = {
   },
 
   async updateNote(id: string, payload: UpdateNotePayload): Promise<Note> {
-    const updated = await apiRequest<Note>(`/notes/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      body: payload,
-    });
     const current = memoryNotes ?? [];
-    persistNotes(current.map((n) => (n.id === id ? updated : n)));
+    const existing = current.find((n) => n.id === id);
+    const updated: Note = existing
+      ? { ...existing, ...payload, updatedAt: new Date().toISOString() }
+      : ({} as Note);
+
+    if (existing) {
+      persistNotes(current.map((n) => (n.id === id ? updated : n)));
+    }
+
+    await apiClient.syncPatch<Note>(
+      `/notes/${encodeURIComponent(id)}`,
+      payload,
+      `note_${id}`,
+      updated
+    );
     return updated;
   },
 
