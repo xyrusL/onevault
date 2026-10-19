@@ -6,6 +6,7 @@ import {
   Database,
   FolderPlus,
   FolderSimple,
+  Funnel,
   Gear,
   ListBullets,
   MagnifyingGlass,
@@ -14,7 +15,15 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { useServiceBadgeStyle } from '../context/ServiceBadgeStyleContext';
-import { MailSortOrder, MailViewMode, ServiceBadgeStyle } from '../types/mail.types';
+import {
+  DEFAULT_MAIL_FILTERS,
+  MailActivityFilter,
+  MailFilterState,
+  MailSortOrder,
+  MailStatusFilter,
+  MailViewMode,
+  ServiceBadgeStyle,
+} from '../types/mail.types';
 
 interface MailHeaderProps {
   viewMode: MailViewMode;
@@ -29,6 +38,10 @@ interface MailHeaderProps {
   unreadActivityCount: number;
   sortOrder?: MailSortOrder;
   onSortOrderChange?: (order: MailSortOrder) => void;
+  filters?: MailFilterState;
+  onFilterChange?: (filters: MailFilterState) => void;
+  availableDomains?: string[];
+  availableServices?: string[];
 }
 
 const BADGE_STYLE_OPTIONS: Array<{ value: ServiceBadgeStyle; label: string }> = [
@@ -57,30 +70,40 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
   unreadActivityCount,
   sortOrder = 'newest',
   onSortOrderChange,
+  filters = DEFAULT_MAIL_FILTERS,
+  onFilterChange,
+  availableDomains = [],
+  availableServices = [],
 }) => {
   const { badgeStyle, setBadgeStyle } = useServiceBadgeStyle();
   const [isBadgeMenuOpen, setIsBadgeMenuOpen] = useState(false);
   const badgeMenuRef = useRef<HTMLDivElement>(null);
 
-  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
-  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+
+  const isFilterActive =
+    filters.status !== 'all' ||
+    filters.activity !== 'all' ||
+    filters.domain !== 'all' ||
+    filters.service !== 'all';
 
   const hasUnreadActivity = unreadActivityCount > 0;
 
   useEffect(() => {
-    if (!isBadgeMenuOpen && !isSortMenuOpen) return;
+    if (!isBadgeMenuOpen && !isFilterMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
       if (badgeMenuRef.current && !badgeMenuRef.current.contains(target)) {
         setIsBadgeMenuOpen(false);
       }
-      if (sortMenuRef.current && !sortMenuRef.current.contains(target)) {
-        setIsSortMenuOpen(false);
+      if (filterMenuRef.current && !filterMenuRef.current.contains(target)) {
+        setIsFilterMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isBadgeMenuOpen, isSortMenuOpen]);
+  }, [isBadgeMenuOpen, isFilterMenuOpen]);
 
   return (
     <header className="flex flex-col gap-3">
@@ -240,10 +263,10 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
           </button>
         </div>
 
-        {/* Right side controls: Search Email Input + Service Badge Display Style Gear */}
+        {/* Right side controls: Search Email Input with embedded Filter Popover + Service Badge Style Gear */}
         <div className="flex items-center gap-1.5 w-full sm:w-auto">
-          {/* Search Email Input */}
-          <div className="relative flex items-center flex-1 sm:w-72">
+          {/* Search Email Input with embedded Filter icon and dropdown */}
+          <div className="relative flex items-center flex-1 sm:w-80" ref={filterMenuRef}>
             <span className="pointer-events-none absolute left-3 inline-flex items-center justify-center text-sky-400/80">
               <MagnifyingGlass size={14} weight="bold" />
             </span>
@@ -257,75 +280,257 @@ export const MailHeader: React.FC<MailHeaderProps> = ({
                   : 'Search email | note...'
               }
               aria-label="Search email addresses"
-              className="w-full rounded-lg bg-surface hover:bg-elevated focus:bg-surface-solid pl-8 pr-7 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-sky-500/50 focus:outline-none transition-colors"
+              className="w-full rounded-lg bg-surface hover:bg-elevated focus:bg-surface-solid pl-8 pr-16 py-1.5 text-xs text-fg-primary placeholder:text-fg-placeholder border border-default focus:border-sky-500/50 focus:outline-none transition-colors"
             />
-            {searchQuery && (
+            {/* Embedded buttons inside right side of search bar */}
+            <div className="absolute right-1.5 flex items-center gap-1">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => onSearchChange('')}
+                  title="Clear search"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:text-fg-primary cursor-pointer"
+                >
+                  <X size={12} weight="bold" />
+                </button>
+              )}
+
+              {/* Filter & Sort Button inside search bar */}
               <button
                 type="button"
-                onClick={() => onSearchChange('')}
-                title="Clear search"
-                className="absolute right-2 inline-flex h-4 w-4 items-center justify-center rounded text-fg-muted hover:text-fg-primary cursor-pointer"
-              >
-                <X size={12} weight="bold" />
-              </button>
-            )}
-          </div>
-
-          {/* Mail Account Sort Order (Popover) */}
-          {viewMode !== 'activity' && onSortOrderChange && (
-            <div className="relative shrink-0" ref={sortMenuRef}>
-              <button
-                type="button"
-                onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                title={`Sort accounts: ${
-                  SORT_OPTIONS.find((o) => o.value === sortOrder)?.label || 'Newest First'
-                }`}
-                aria-label="Sort accounts"
-                aria-expanded={isSortMenuOpen}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-all cursor-pointer ${
-                  isSortMenuOpen || sortOrder !== 'newest'
-                    ? 'bg-elevated border-indigo-500/50 text-indigo-400 shadow-xs'
-                    : 'bg-surface hover:bg-elevated border-default text-fg-secondary hover:text-fg-primary'
+                onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+                title={`Filters & Sort${isFilterActive ? ' (Active)' : ''}`}
+                aria-label="Filter and sort accounts"
+                aria-expanded={isFilterMenuOpen}
+                className={`relative inline-flex h-6 w-6 items-center justify-center rounded-md transition-all cursor-pointer ${
+                  isFilterMenuOpen || isFilterActive
+                    ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 shadow-xs'
+                    : 'text-fg-muted hover:text-fg-primary hover:bg-elevated'
                 }`}
               >
-                <ArrowsDownUp
-                  size={15}
-                  weight={isSortMenuOpen || sortOrder !== 'newest' ? 'bold' : 'regular'}
-                />
+                <Funnel size={13} weight={isFilterActive ? 'fill' : 'bold'} />
+                {isFilterActive && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-sky-400 ring-2 ring-surface" />
+                )}
               </button>
+            </div>
 
-              {isSortMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-44 rounded-xl border border-default bg-surface-solid/95 backdrop-blur-md p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
-                    Sort Accounts
+            {/* Filter & Sort Popover Dropdown */}
+            {isFilterMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-72 rounded-xl border border-default bg-surface-solid/95 backdrop-blur-md p-3 shadow-2xl z-50 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-100 max-h-[85vh] overflow-y-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-default">
+                  <div className="flex items-center gap-1.5">
+                    <Funnel size={13} weight="bold" className="text-sky-400" />
+                    <span className="text-xs font-semibold text-fg-primary">
+                      Filters & Sort
+                    </span>
                   </div>
-                  {SORT_OPTIONS.map((opt) => {
-                    const isSelected = sortOrder === opt.value;
-                    return (
+                  {(isFilterActive || (sortOrder && sortOrder !== 'newest')) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onFilterChange?.(DEFAULT_MAIL_FILTERS);
+                        onSortOrderChange?.('newest');
+                      }}
+                      className="text-[11px] font-medium text-sky-400 hover:text-sky-300 transition-colors cursor-pointer"
+                    >
+                      Reset all
+                    </button>
+                  )}
+                </div>
+
+                {/* Sort Order */}
+                {viewMode !== 'activity' && onSortOrderChange && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="flex items-center gap-1 text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                      <ArrowsDownUp size={11} weight="bold" />
+                      <span>Sort By</span>
+                    </span>
+                    <div className="grid grid-cols-2 gap-1">
+                      {SORT_OPTIONS.map((opt) => {
+                        const isSelected = sortOrder === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => onSortOrderChange(opt.value)}
+                            className={`flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-medium transition-all text-left cursor-pointer border ${
+                              isSelected
+                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                            }`}
+                          >
+                            <span className="truncate">{opt.label}</span>
+                            {isSelected && (
+                              <Check size={12} weight="bold" className="text-sky-400 shrink-0" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Status / Forwarding Filter */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                    Routing Status
+                  </span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'forwarding', label: 'Forwarding' },
+                      { value: 'vault', label: 'Vault Only' },
+                    ].map((opt) => {
+                      const isSelected = filters.status === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFilterChange?.({
+                              ...filters,
+                              status: opt.value as MailStatusFilter,
+                            })
+                          }
+                          className={`px-2 py-1.5 rounded-lg text-xs font-medium text-center transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                              : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Activity / Messages Filter */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                    Activity Messages
+                  </span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[
+                      { value: 'all', label: 'All' },
+                      { value: 'with-activity', label: 'Active' },
+                      { value: 'no-activity', label: 'Empty' },
+                    ].map((opt) => {
+                      const isSelected = filters.activity === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            onFilterChange?.({
+                              ...filters,
+                              activity: opt.value as MailActivityFilter,
+                            })
+                          }
+                          className={`px-2 py-1.5 rounded-lg text-xs font-medium text-center transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                              : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Domain Filter (if multiple domains available) */}
+                {availableDomains && availableDomains.length > 1 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                      Domain
+                    </span>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
                       <button
-                        key={opt.value}
                         type="button"
-                        onClick={() => {
-                          onSortOrderChange(opt.value);
-                          setIsSortMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
-                          isSelected
-                            ? 'bg-indigo-500/10 text-indigo-400 font-semibold'
-                            : 'text-fg-secondary hover:text-fg-primary hover:bg-elevated'
+                        onClick={() => onFilterChange?.({ ...filters, domain: 'all' })}
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
+                          filters.domain === 'all'
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                            : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
                         }`}
                       >
-                        <span>{opt.label}</span>
-                        {isSelected && (
-                          <Check size={13} weight="bold" className="text-indigo-400 shrink-0" />
-                        )}
+                        All Domains
                       </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                      {availableDomains.map((dom) => {
+                        const isSelected = filters.domain.toLowerCase() === dom.toLowerCase();
+                        return (
+                          <button
+                            key={dom}
+                            type="button"
+                            onClick={() =>
+                              onFilterChange?.({
+                                ...filters,
+                                domain: isSelected ? 'all' : dom,
+                              })
+                            }
+                            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                            }`}
+                          >
+                            @{dom}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Service Tag Filter (if tags available) */}
+                {availableServices && availableServices.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+                      Detected Service
+                    </span>
+                    <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                      <button
+                        type="button"
+                        onClick={() => onFilterChange?.({ ...filters, service: 'all' })}
+                        className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
+                          filters.service === 'all'
+                            ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                            : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                        }`}
+                      >
+                        All Services
+                      </button>
+                      {availableServices.map((svc) => {
+                        const isSelected = filters.service.toLowerCase() === svc.toLowerCase();
+                        return (
+                          <button
+                            key={svc}
+                            type="button"
+                            onClick={() =>
+                              onFilterChange?.({
+                                ...filters,
+                                service: isSelected ? 'all' : svc,
+                              })
+                            }
+                            className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                                : 'bg-surface hover:bg-elevated text-fg-secondary hover:text-fg-primary border-transparent'
+                            }`}
+                          >
+                            {svc}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Service Tag Badge Display Setting (Gear Popover) */}
           <div className="relative shrink-0" ref={badgeMenuRef}>

@@ -69,3 +69,20 @@ export type ServiceBadgeStyle = 'icon' | 'both' | 'name';
 
 export type MailSortOrder = 'newest' | 'oldest' | 'email-asc' | 'email-desc';
 
+export type MailStatusFilter = 'all' | 'forwarding' | 'vault';
+export type MailActivityFilter = 'all' | 'with-activity' | 'no-activity';
+
+export interface MailFilterState {
+  status: MailStatusFilter;
+  activity: MailActivityFilter;
+  domain: string;
+  service: string;
+}
+
+export const DEFAULT_MAIL_FILTERS: MailFilterState = {
+  status: 'all',
+  activity: 'all',
+  domain: 'all',
+  service: 'all',
+};
+

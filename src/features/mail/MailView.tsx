@@ -34,10 +34,12 @@ import {
 import {
   CreateMailPayload,
   CreateSubdomainPayload,
+  DEFAULT_MAIL_FILTERS,
   ForwardTarget,
   isVaultDestination,
   MailAccountItem,
   MailDomain,
+  MailFilterState,
   MailFolderInfo,
   MailSortOrder,
   MailViewMode,
@@ -102,19 +104,95 @@ export const MailView: React.FC = () => {
     } catch {}
   };
 
+  const [filters, setFilters] = useState<MailFilterState>(() => {
+    try {
+      const saved = localStorage.getItem('onevault.mail.filters');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_MAIL_FILTERS;
+  });
+
+  const handleFilterChange = (newFilters: MailFilterState) => {
+    setFilters(newFilters);
+    try {
+      localStorage.setItem('onevault.mail.filters', JSON.stringify(newFilters));
+    } catch {}
+  };
+
   // Compute smart service detection map across all accounts & activity items
   const detectionMap = useMemo(() => {
     return buildServiceDetectionMap(accounts, activityItems);
   }, [accounts, activityItems]);
 
-  // Global search filtering for accounts (searches email, forward, note, AND generated tags!)
+  // Available domains across all accounts
+  const availableDomains = useMemo(() => {
+    const set = new Set<string>();
+    for (const acc of accounts) {
+      if (acc.domain) set.add(acc.domain.toLowerCase());
+    }
+    return Array.from(set).sort();
+  }, [accounts]);
+
+  // Available service tags across all accounts
+  const availableServices = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of detectionMap.byAccountId.values()) {
+      for (const tag of s.tags) {
+        if (tag.name) set.add(tag.name);
+      }
+    }
+    return Array.from(set).sort();
+  }, [detectionMap]);
+
+  // Global search & multi-criteria filtering for accounts
   const filteredAccounts = useMemo(() => {
+    let result = accounts;
+
+    // 1. Text Search Query (email, forward, note, service tags)
     const q = searchQuery.trim();
-    if (!q) return accounts;
-    return accounts.filter((item) =>
-      accountMatchesSearch(item, detectionMap.byAccountId.get(item.id), q)
-    );
-  }, [accounts, searchQuery, detectionMap]);
+    if (q) {
+      result = result.filter((item) =>
+        accountMatchesSearch(item, detectionMap.byAccountId.get(item.id), q)
+      );
+    }
+
+    // 2. Status / Routing Filter
+    if (filters.status === 'forwarding') {
+      result = result.filter((item) => !isVaultDestination(item.forwardTo));
+    } else if (filters.status === 'vault') {
+      result = result.filter((item) => isVaultDestination(item.forwardTo));
+    }
+
+    // 3. Activity / Messages Filter
+    if (filters.activity === 'with-activity') {
+      result = result.filter(
+        (item) => (detectionMap.byAccountId.get(item.id)?.totalIncomingCount ?? 0) > 0
+      );
+    } else if (filters.activity === 'no-activity') {
+      result = result.filter(
+        (item) => (detectionMap.byAccountId.get(item.id)?.totalIncomingCount ?? 0) === 0
+      );
+    }
+
+    // 4. Domain Filter
+    if (filters.domain && filters.domain !== 'all') {
+      result = result.filter(
+        (item) => item.domain.toLowerCase() === filters.domain.toLowerCase()
+      );
+    }
+
+    // 5. Service Tag Filter
+    if (filters.service && filters.service !== 'all') {
+      result = result.filter((item) => {
+        const summary = detectionMap.byAccountId.get(item.id);
+        return summary?.tags.some(
+          (t) => t.name.toLowerCase() === filters.service.toLowerCase()
+        );
+      });
+    }
+
+    return result;
+  }, [accounts, searchQuery, detectionMap, filters]);
 
   // Sort accounts deterministically based on active sort order (defaulting to Newest First)
   const sortedAccounts = useMemo(() => {
@@ -133,19 +211,39 @@ export const MailView: React.FC = () => {
     });
   }, [filteredAccounts, sortOrder]);
 
-  // Global search filtering for activity items
+  // Global search & status filtering for activity items
   const filteredActivity = useMemo(() => {
+    let result = activityItems;
+
+    // Text search
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return activityItems;
-    return activityItems.filter(
-      (item) =>
-        item.recipientEmail.toLowerCase().includes(q) ||
-        item.sender.toLowerCase().includes(q) ||
-        item.senderName.toLowerCase().includes(q) ||
-        item.subject.toLowerCase().includes(q) ||
-        item.forwardTo.toLowerCase().includes(q)
-    );
-  }, [activityItems, searchQuery]);
+    if (q) {
+      result = result.filter(
+        (item) =>
+          item.recipientEmail.toLowerCase().includes(q) ||
+          item.sender.toLowerCase().includes(q) ||
+          item.senderName.toLowerCase().includes(q) ||
+          item.subject.toLowerCase().includes(q) ||
+          item.forwardTo.toLowerCase().includes(q)
+      );
+    }
+
+    // Status filter
+    if (filters.status === 'forwarding') {
+      result = result.filter((item) => !isVaultDestination(item.forwardTo));
+    } else if (filters.status === 'vault') {
+      result = result.filter((item) => isVaultDestination(item.forwardTo));
+    }
+
+    // Domain filter
+    if (filters.domain && filters.domain !== 'all') {
+      result = result.filter((item) =>
+        item.recipientEmail.toLowerCase().endsWith(`@${filters.domain.toLowerCase()}`)
+      );
+    }
+
+    return result;
+  }, [activityItems, searchQuery, filters]);
 
   // Unread activity count (turns the Activity tab green when > 0)
   const unreadActivityCount = useMemo(
@@ -415,6 +513,10 @@ export const MailView: React.FC = () => {
         unreadActivityCount={unreadActivityCount}
         sortOrder={sortOrder}
         onSortOrderChange={handleSortOrderChange}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        availableDomains={availableDomains}
+        availableServices={availableServices}
       />
 
       {loadError && (
