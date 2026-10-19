@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   FileText,
+  Minus,
   PaperPlaneTilt,
   Pulse,
   Tray,
@@ -40,6 +41,11 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
   const isVault = isVaultDestination(item.forwardTo);
   const isRootDomain = item.domain.split('.').length <= 2;
   const theme = resolveSubdomainTheme(item.domain, isRootDomain);
+
+  const activityCount = summary
+    ? Math.max(summary.totalIncomingCount, summary.tags.length)
+    : 0;
+  const hasActivity = activityCount > 0;
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -182,18 +188,40 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Activity Action Button */}
+            {/* Activity Action Button (fixed uniform width + balanced icon if no activity) */}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenActivity ? onOpenActivity(item) : onSelect(item);
               }}
-              title="View Activity & Generated Tags"
-              className="inline-flex items-center gap-1 rounded border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2 py-0.5 text-[11px] font-medium text-fg-secondary hover:text-fg-primary transition-colors cursor-pointer"
+              title={
+                hasActivity
+                  ? `View Activity & Generated Tags (${activityCount})`
+                  : 'No activity yet'
+              }
+              className="w-[88px] inline-flex items-center justify-between gap-1 rounded border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2 py-0.5 text-[11px] font-medium text-fg-secondary hover:text-fg-primary transition-colors cursor-pointer"
             >
-              <Pulse size={11} weight="bold" className="text-fg-muted" />
-              <span>Activity</span>
+              <div className="flex items-center gap-1 min-w-0">
+                <Pulse
+                  size={11}
+                  weight="bold"
+                  className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
+                />
+                <span className="truncate">Activity</span>
+              </div>
+              {hasActivity ? (
+                <span className="min-w-3.5 text-center rounded-full bg-surface-solid border border-default px-1 py-0 text-[9px] font-mono leading-tight text-fg-secondary shrink-0">
+                  {activityCount}
+                </span>
+              ) : (
+                <span
+                  title="No activity yet"
+                  className="min-w-3.5 inline-flex items-center justify-center rounded-full border border-dashed border-default/60 px-1 py-0 text-[8px] font-mono leading-tight text-fg-muted/60 shrink-0"
+                >
+                  <Minus size={8} weight="bold" />
+                </span>
+              )}
             </button>
 
             {isVault && (
@@ -362,21 +390,38 @@ export const MailAccountRow: React.FC<MailAccountRowProps> = ({
 
         {/* Column 3: Activity + Inbox (only for Vault) + Details Actions */}
         <div className="sm:col-span-3 flex items-center justify-end gap-1.5">
-          {/* Activity Action Button */}
+          {/* Activity Action Button (fixed uniform width + balanced icon if no activity) */}
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onOpenActivity ? onOpenActivity(item) : onSelect(item);
             }}
-            title="View Inbound Activity & Generated Service Tags"
-            className="inline-flex items-center justify-center gap-1.5 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2.5 py-1 text-xs font-medium text-fg-secondary hover:text-fg-primary transition-all duration-200 cursor-pointer"
+            title={
+              hasActivity
+                ? `View Inbound Activity & Generated Service Tags (${activityCount})`
+                : 'No inbound activity yet'
+            }
+            className="w-[98px] inline-flex items-center justify-between gap-1.5 rounded-md border border-default bg-elevated hover:bg-surface-solid hover:border-strong px-2.5 py-1 text-xs font-medium text-fg-secondary hover:text-fg-primary transition-all duration-200 cursor-pointer"
           >
-            <Pulse size={12} weight="bold" className="text-fg-muted" />
-            <span className="leading-none">Activity</span>
-            {summary && summary.tags.length > 0 && (
-              <span className="rounded-full bg-surface-solid border border-default px-1.5 py-0 text-[10px] font-mono leading-tight text-fg-secondary">
-                {summary.tags.length}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Pulse
+                size={12}
+                weight="bold"
+                className={hasActivity ? 'text-emerald-400 shrink-0' : 'text-fg-muted/60 shrink-0'}
+              />
+              <span className="leading-none text-xs">Activity</span>
+            </div>
+            {hasActivity ? (
+              <span className="min-w-4 text-center rounded-full bg-surface-solid border border-default px-1.5 py-0 text-[10px] font-mono leading-tight text-fg-secondary shrink-0">
+                {activityCount}
+              </span>
+            ) : (
+              <span
+                title="No activity yet"
+                className="min-w-4 inline-flex items-center justify-center rounded-full border border-dashed border-default/60 px-1 py-0 text-[9px] font-mono leading-tight text-fg-muted/60 shrink-0"
+              >
+                <Minus size={9} weight="bold" />
               </span>
             )}
           </button>
