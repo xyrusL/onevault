@@ -101,7 +101,26 @@ src/
     │   ├── types/                        # notes.types.ts
     │   ├── utils/                        # note-embed.utils.ts, note-colors.utils.ts, note-format.utils.ts
     │   └── NotesView.tsx
+    ├── projects/                         # Universal Project Edge Gateway, Security Shield & Telemetry
+    │   ├── components/
+    │   │   ├── ProjectCard.tsx           # Grid card representation of connected apps
+    │   │   ├── ProjectRow.tsx            # Mail-style compact table row with live status indicators
+    │   │   ├── ProjectConfigModal.tsx    # Clean connect modal, auto-inspect metadata, devMode toggle
+    │   │   ├── ProjectIntegrationModal.tsx # Live pairing handshake, production domain selector, framework tabs
+    │   │   ├── UnplugModal.tsx           # Shared BaseModal for temporary edge shield pause
+    │   │   └── DeleteProjectModal.tsx    # Shared BaseModal for project deletion confirmation
+    │   ├── services/                     # projects.service.ts (Cloudflare D1 sync & cached fallback)
+    │   ├── types/                        # projects.types.ts
+    │   └── ProjectsView.tsx              # Mail-styled full view, search bar & metrics header
     └── settings/                         # Portal Settings & Cloudflare configuration module
+worker/
+├── migrations/                           # D1 SQL schemas (0012_create_projects_and_threat_logs.sql)
+└── src/
+    ├── routes/
+    │   ├── projects.routes.ts            # /api/projects: Config, D1 auto-init, site inspection & live verify
+    │   └── gateway.routes.ts             # /api/gateway: Public edge gateway (handshake, proxy, stream, telemetry)
+    ├── services/                         # dashboard.service.ts, threat-guard.service.ts
+    └── index.ts                          # Cloudflare Worker entry & route dispatching
 ```
 
 ---

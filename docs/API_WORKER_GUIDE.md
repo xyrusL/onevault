@@ -214,7 +214,34 @@ While the **Autonomous 5-Layer DDoS Self-Defense** protects the entire site duri
 
 ---
 
-## 7. Development & Deployment Commands
+## 7. Universal Projects & Edge Security Gateway API (`/api/gateway/*` & `/api/projects/*`)
+
+OneVault functions as a centralized security edge gateway protecting connected client projects (e.g., GIGAMAXX 4K streaming platform).
+
+### Public Edge Gateway Endpoints (`/api/gateway/:slug/*`)
+
+| Method | Endpoint | Description | Auth Requirement |
+| :--- | :--- | :--- | :--- |
+| **`POST`** | `/api/gateway/:slug/handshake` | Authenticates client app using Project Gateway Token, updates `last_seen_at`, sets project status to `active` (turns green), and writes audit log to D1. | Header `X-OneVault-Token` or JSON `{ token }` |
+| **`ALL`** | `/api/gateway/:slug/proxy/*` | Reverse-proxies upstream requests to the project's configured `upstreamApi` (or additional concealed mirrors), stripping origin headers and preventing browser DevTools API exposure. | `devMode` bypass or Token check |
+| **`GET`** | `/api/gateway/:slug/stream` | Obfuscates stream sources (`?src=...`) and attaches dynamic, time-limited HMAC signatures. | Token signed query parameter |
+| **`POST`** | `/api/gateway/:slug/telemetry` | Ingests real-time client security telemetry (404 probes, stream play events, errors) directly into D1 `system_audit_logs`. | Optional token check |
+| **`GET`** | `/api/gateway/:slug/config` | Fetches active shield policies and feature flags for the connected application. | Public edge cache |
+
+### Admin Project Management Endpoints (`/api/projects/*`)
+
+| Method | Endpoint | Description | Auth Requirement |
+| :--- | :--- | :--- | :--- |
+| **`GET`** | `/api/projects` | Lists all connected projects, shield policies, stats, and pairing status. Auto-creates `connected_projects` D1 table if missing. | Required (`requireAuth`) |
+| **`POST`** | `/api/projects` | Registers a new project, generating a unique `gatewayToken` (`ov_live_<slug>_<rand>`). | Required (`requireAuth`) |
+| **`PUT`** | `/api/projects/:id` | Updates project policies (e.g. toggling `devMode`, rate limits, concealed endpoints). | Required (`requireAuth`) |
+| **`DELETE`** | `/api/projects/:id` | Removes a connected project from D1. | Required (`requireAuth`) |
+| **`GET`** | `/api/projects/:id/verify` | Checks if project has completed its initial boot handshake (polled by `ProjectIntegrationModal`). | Required (`requireAuth`) |
+| **`POST`** | `/api/projects/inspect` | Fetches target site HTML and auto-extracts `og:title`, `<title>`, and `meta description`. | Required (`requireAuth`) |
+
+---
+
+## 8. Development & Deployment Commands
 - **Site Dev (Proxies `/api` to Worker)**: `npm run dev`
 - **Worker Dev (Wrangler on `:8787`)**: `npm run dev:worker`
 - **D1 Migration (Local)**: `npm run db:migrate:local`

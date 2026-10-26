@@ -290,4 +290,45 @@ flowchart TD
     Success -->|"Yes"| RemoveQueue["Remove Mutation from Queue & Update localStorage"]
     RemoveQueue --> SyncedState["Set Status: 'synced' -> 'idle'"]
     Success -->|"Network Error"| Retry["Increment retryCount (Retries automatically on next idle or 'online' event)"]
+
+---
+
+## 10. Universal Project Gateway Connection, Protection & Activity Telemetry Flow
+How connected sites (e.g. GIGAMAXX 4K) pair with OneVault via Gateway Token, undergo edge scrubbing, conceal upstream APIs, and stream live audit events into Cloudflare D1.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / Site Owner
+    participant ClientApp as Connected App (e.g. GIGAMAXX)
+    participant Modal as OneVault ProjectIntegrationModal
+    participant Edge as OneVault Worker (/api/gateway)
+    participant D1 as Cloudflare D1 Database
+    participant Activity as RecentActivityFeed (OneVault)
+
+    %% Step 1: Project Provisioning
+    Dev->>Modal: Creates Project or opens Connection Modal
+    Modal->>Dev: Generates Gateway Token (ov_live_*) & Universal .env Snippet
+    Note over Dev,ClientApp: Developer pastes ONEVAULT_GATEWAY_URL & TOKEN into .env
+
+    %% Step 2: Boot Handshake
+    ClientApp->>Edge: POST /api/gateway/:slug/handshake (X-OneVault-Token)
+    Edge->>D1: Verify token & UPDATE connected_projects SET status='active', last_seen_at=NOW()
+    Edge->>D1: INSERT INTO system_audit_logs ([Project] Handshake Verified)
+    Edge-->>ClientApp: 200 OK (status: 'active', verified: true)
+    
+    %% Step 3: Live Pairing Detection
+    Modal->>Edge: Polls GET /api/projects/:id/verify
+    Edge-->>Modal: Status changed: 'connecting' (Amber) -> 'active' (Emerald Green)
+    Modal-->>Dev: Verified badge turns Green
+
+    %% Step 4: Concealed Streaming & API Calls
+    ClientApp->>Edge: GET /api/gateway/:slug/proxy/api/* (Concealed Upstream Query)
+    Edge->>Edge: Bot scrub, origin check, DevMode check
+    Edge->>ClientApp: Return sanitized upstream data (Upstream host hidden from DevTools)
+
+    %% Step 5: Unified Audit Feed
+    Activity->>D1: Fetch recent system_audit_logs
+    Activity-->>Dev: Displays [Project] VERIFIED, [Project] STREAM, BLOCKED 403 badges
+```
 ```
