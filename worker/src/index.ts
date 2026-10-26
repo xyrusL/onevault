@@ -33,15 +33,33 @@ app.use(
   '*',
   cors({
     origin: (origin) => origin || '*',
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-OneVault-Token',
+      'x-onevault-token',
+      'Accept',
+      'Cache-Control',
+      'Origin',
+    ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    exposeHeaders: ['Content-Length'],
+    exposeHeaders: ['Content-Length', 'X-OneVault-Status'],
+    credentials: true,
     maxAge: 86400,
   })
 );
 
+// Fast-path OPTIONS preflight response with 204
+app.options('*', (c) => c.body(null, 204));
+
 // Security basic + Adaptive Threat Guard (IPS) + Edge DDoS Self-Defense Shield
 app.use('*', async (c, next) => {
+  // Always let OPTIONS preflight pass through without security blocks
+  if (c.req.method === 'OPTIONS') {
+    return next();
+  }
+
   // 1. Adaptive Threat Guard (Behavioral IPS): per-actor route-scanner, canary honeypot, and exploit payload inspection
   threatGuardService.inspectIncomingRequest(c);
 

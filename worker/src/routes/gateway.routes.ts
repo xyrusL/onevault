@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { HttpError } from '../lib/http-error';
 import { threatGuardService } from '../services/threat-guard.service';
 import type { AppBindings } from '../types/env.types';
@@ -103,9 +103,9 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
   if (c.env?.DB) {
     try {
       const row = await c.env.DB.prepare(
-        'SELECT id, name, slug, status, gateway_token FROM connected_projects WHERE slug = ?'
+        'SELECT id, name, slug, status, gateway_token FROM connected_projects WHERE slug = ? OR gateway_token = ?'
       )
-        .bind(slug)
+        .bind(slug, token)
         .first<{ id: string; name: string; slug: string; status: string; gateway_token?: string }>();
 
       if (row) {
@@ -127,11 +127,6 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
     } catch (e) {
       if (e instanceof HttpError) throw e;
     }
-  }
-
-  // If default gigamaxx fallback
-  if (!projectFound && slug === 'gigamaxx') {
-    projectFound = true;
   }
 
   if (!projectFound) {
@@ -171,16 +166,38 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
 });
 
 /**
- * POST /api/gateway/:slug/telemetry
- * Real-time 24/7 security & activity telemetry collector
- * Evaluates route scans, 404 probes, DevTools inspections, watch minutes, stream events & player errors
- * Persists structured records into D1 project_telemetry_events & system_audit_logs
+ * Universal Telemetry & Activity Ingestion Handler
+ * Supports /:slug/telemetry, /:slug/event, and /:slug/events
+ * Ingests client activity, enriches with Cloudflare Edge metadata, and persists to D1
  */
-gatewayRoutes.post('/:slug/telemetry', async (c) => {
-  const slug = c.req.param('slug').toLowerCase();
-  const projectName = slug === 'gigamaxx' ? 'GIGAMAXX 4K' : slug.toUpperCase();
+const handleProjectTelemetry = async (c: Context<AppBindings>) => {
+  const slug = (c.req.param('slug') || '').toLowerCase();
 
-  const body = await c.req.json<TelemetryBody>().catch(() => null);
+  // Dynamically resolve project name from D1 connected_projects
+  let projectName = slug.toUpperCase();
+  if (c.env?.DB) {
+    try {
+      const projRow = await c.env.DB.prepare('SELECT name FROM connected_projects WHERE slug = ?')
+        .bind(slug)
+        .first<{ name: string }>();
+      if (projRow?.name) projectName = projRow.name;
+    } catch {}
+  }
+
+  // Support both JSON content-type and text/plain fallback (for simple CORS / sendBeacon)
+  let body: TelemetryBody | null = null;
+  const contentType = c.req.header('Content-Type') || '';
+  if (contentType.includes('application/json')) {
+    body = await c.req.json<TelemetryBody>().catch(() => null);
+  } else {
+    const rawText = await c.req.text().catch(() => '');
+    try {
+      body = JSON.parse(rawText) as TelemetryBody;
+    } catch {
+      body = null;
+    }
+  }
+
   if (!body || !body.event) {
     return c.json({ ok: false, error: 'Invalid telemetry payload' }, 400);
   }
@@ -451,7 +468,12 @@ gatewayRoutes.post('/:slug/telemetry', async (c) => {
     action: threatAction,
     timestamp: now,
   });
-});
+};
+
+// Mount universal telemetry endpoints (aliases prevent adblock ERR_BLOCKED_BY_CLIENT)
+gatewayRoutes.post('/:slug/telemetry', handleProjectTelemetry);
+gatewayRoutes.post('/:slug/event', handleProjectTelemetry);
+gatewayRoutes.post('/:slug/events', handleProjectTelemetry);
 
 /**
  * GET /api/gateway/:slug/stream
