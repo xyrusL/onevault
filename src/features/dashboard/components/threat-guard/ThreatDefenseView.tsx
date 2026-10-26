@@ -259,7 +259,7 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
             <div className="flex items-center gap-2 text-[11px] font-mono text-fg-muted mt-0.5">
               <span>Cloudflare Worker Edge</span>
               <span>·</span>
-              <span className="text-emerald-400">0% False Positives</span>
+              <span className="text-emerald-400">OneVault + Connected Sites Protected (24/7)</span>
               <span>·</span>
               <span className="text-cyan-300">
                 {telemetry.penetrationAttemptsBlocked} Exploits Blocked · {telemetry.pageScansIntercepted} Scans Isolated

@@ -171,9 +171,15 @@
 }
 
 /* ============================================================================
- * CUSTOM CSS ENHANCEMENTS (Supporting Tailwind CSS where needed)
+ * MODERN CSS RESET & BASE ENHANCEMENTS
+ * ============================================================================
+ * Note: Tailwind CSS v4 automatically provides Preflight (modern-normalize reset)
+ * via `@import "tailwindcss";` at the top of this file. The rules below provide
+ * additional modern CSS reset hardening across all elements and pseudo-elements.
  * ============================================================================ */
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -182,6 +188,7 @@ body,
 #root {
   min-height: 100vh;
   margin: 0;
+  padding: 0;
 }
 
 body {

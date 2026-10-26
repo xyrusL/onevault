@@ -8,9 +8,11 @@ import { backupRoutes } from './routes/backup.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 import { domainsRoutes } from './routes/domains.routes';
 import { forwardTargetsRoutes } from './routes/forward-targets.routes';
+import { gatewayRoutes } from './routes/gateway.routes';
 import { mailInboxRoutes } from './routes/mail-inbox.routes';
 import { mailRoutes } from './routes/mail.routes';
 import { notesRoutes } from './routes/notes.routes';
+import { projectsRoutes } from './routes/projects.routes';
 import { twoFactorRoutes } from './routes/two-factor.routes';
 import { edgeDefenseService } from './services/edge-defense.service';
 import { threatGuardService } from './services/threat-guard.service';
@@ -82,6 +84,7 @@ app.get('/.well-known/webauthn', (c) => {
 
 // Public
 app.route('/api/auth', authRoutes);
+app.route('/api/gateway', gatewayRoutes);
 
 // Everything below requires a signed session token
 app.use('/api/*', requireAuth);
@@ -92,6 +95,7 @@ app.route('/api/forward-targets', forwardTargetsRoutes);
 app.route('/api/mail', mailRoutes);
 app.route('/api/mail-inbox', mailInboxRoutes);
 app.route('/api/notes', notesRoutes);
+app.route('/api/projects', projectsRoutes);
 app.route('/api/two-factor', twoFactorRoutes);
 
 // Automatically discover and enroll all mounted `/api/*` routes in both the 5-Layer Self-Defense Engine & Adaptive Threat Guard

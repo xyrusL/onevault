@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Browsers,
   CaretDown,
   CaretUp,
   Clock,
@@ -28,12 +29,13 @@ interface RecentActivityFeedProps {
   onNavigate?: (section: PortalSectionId) => void;
 }
 
-type FilterTab = 'all' | 'threats' | 'mail' | 'notes' | 'twoFactor' | 'alerts';
+type FilterTab = 'all' | 'projects' | 'threats' | 'mail' | 'notes' | 'twoFactor' | 'alerts';
 
 interface FeedItem {
   id: string;
   type:
     | 'threat_act'
+    | 'project_act'
     | 'mail_msg'
     | 'mail_acc'
     | 'note'
@@ -52,7 +54,7 @@ interface FeedItem {
   timestamp: string;
   badge: string;
   badgeColor: string;
-  targetSection?: 'mail' | 'notes' | 'two-factor';
+  targetSection?: 'mail' | 'notes' | 'two-factor' | 'projects';
 }
 
 const PAGE_SIZE = 5;
@@ -171,11 +173,21 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
     stats.auditLogs.recentLogs.forEach((log) => {
       const isErr = log.level === 'error';
       const isWarn = log.level === 'warning';
+      const isProjectLog = log.category === 'projects' || log.title.includes('GIGAMAXX');
       const isThreatTitle =
         log.title.includes('Threat Intercepted') ||
         log.title.includes('Rate-Limit Intercepted') ||
         log.title.includes('Automated Scanner') ||
         log.title.includes('Exploit Payload');
+
+      // Dynamically extract project name from title tag [NAME]
+      let projectName = '';
+      const projMatch = log.title.match(/^\[(.*?)\]/);
+      if (projMatch && projMatch[1]) {
+        projectName = projMatch[1];
+      } else if (log.title.includes('GIGAMAXX')) {
+        projectName = 'GIGAMAXX 4K';
+      }
 
       const desc = resolveApiStatusDescriptor({
         category: log.category,
@@ -188,30 +200,62 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
       const resolvedStatusText = log.statusText || desc.statusText;
       const resolvedStatusCode = log.statusCode || desc.statusCode;
 
+      let projectBadge = `${resolvedStatusText} · ${resolvedStatusCode}`;
+      if (isThreatTitle) {
+        projectBadge = resolvedStatusCode === 403 ? 'BLOCKED · 403' : 'RATE LIMIT · 429';
+      } else if (isProjectLog) {
+        if (isErr) {
+          projectBadge = `${projectName || 'PROJECT'} ERROR`;
+        } else if (log.title.includes('Handshake')) {
+          projectBadge = `${projectName || 'PROJECT'} · VERIFIED`;
+        } else if (log.title.includes('Stream Started')) {
+          projectBadge = `${projectName || 'PROJECT'} · STREAM`;
+        } else if (isWarn) {
+          projectBadge = `${projectName || 'PROJECT'} · 404`;
+        } else {
+          projectBadge = projectName || 'PROJECT';
+        }
+      }
+
       items.push({
         id: `audit-${log.id}`,
-        type: isThreatTitle ? 'threat_act' : isErr ? 'audit_err' : isWarn ? 'audit_warn' : 'audit_info',
+        type: isThreatTitle
+          ? 'threat_act'
+          : isProjectLog
+          ? 'project_act'
+          : isErr
+          ? 'audit_err'
+          : isWarn
+          ? 'audit_warn'
+          : 'audit_info',
         level: log.level,
         title: log.title,
-        subtitle: desc.meaning || log.message,
+        subtitle: log.message || desc.meaning,
         details: log.details,
         statusCode: resolvedStatusCode,
         statusText: resolvedStatusText,
         rootCause: log.rootCause || desc.rootCause,
         resolution: log.resolution || desc.resolution,
         timestamp: log.createdAt,
-        badge: isThreatTitle
-          ? (resolvedStatusCode === 403 ? 'BLOCKED · 403' : 'RATE LIMIT · 429')
-          : `${resolvedStatusText} · ${resolvedStatusCode}`,
+        badge: projectBadge,
         badgeColor: isThreatTitle
           ? (resolvedStatusCode === 403
               ? 'text-rose-400 bg-rose-500/15 border-rose-500/30 font-bold'
               : 'text-amber-400 bg-amber-500/15 border-amber-500/30 font-bold')
+          : isProjectLog
+          ? (isErr
+              ? 'text-danger bg-danger/10 border-danger/20 font-bold'
+              : isWarn
+              ? 'text-amber-400 bg-amber-500/15 border-amber-500/30 font-bold'
+              : log.title.includes('Handshake')
+              ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30 font-bold'
+              : 'text-sky-400 bg-sky-500/15 border-sky-500/30 font-semibold')
           : isErr
           ? 'text-danger bg-danger/10 border-danger/20 font-bold'
           : isWarn
           ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 font-semibold'
           : 'text-sky-500 bg-sky-500/10 border-sky-500/20',
+        targetSection: isProjectLog ? 'projects' : undefined,
       });
     });
   }
@@ -232,6 +276,13 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
   );
 
   const filteredItems = uniqueItems.filter((item) => {
+    if (activeTab === 'projects') {
+      return (
+        item.type === 'project_act' ||
+        item.targetSection === 'projects' ||
+        item.title.includes('GIGAMAXX')
+      );
+    }
     if (activeTab === 'threats') {
       return (
         item.type === 'threat_act' ||
@@ -266,6 +317,8 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
 
   const getIcon = (item: FeedItem) => {
     switch (item.type) {
+      case 'project_act':
+        return <Browsers size={15} weight="duotone" className="text-emerald-400" />;
       case 'threat_act':
         return <ShieldWarning size={15} weight="duotone" className="text-rose-400" />;
       case 'audit_err':
@@ -468,6 +521,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
           <div className="flex items-center gap-1 text-[11px] overflow-x-auto flex-nowrap sm:flex-wrap pb-1 sm:pb-0 shrink-0">
             {([
               { id: 'all' as FilterTab, label: 'All Activity' },
+              { id: 'projects' as FilterTab, label: 'Projects' },
               { id: 'threats' as FilterTab, label: 'Threats' },
               { id: 'mail' as FilterTab, label: 'Mail' },
               { id: 'notes' as FilterTab, label: 'Notes' },

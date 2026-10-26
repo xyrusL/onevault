@@ -13,6 +13,8 @@ const getNormalizedPath = (): string => {
 const SECTION_MAP: Record<string, PortalSectionId> = {
   '/': 'dashboard',
   '/dashboard': 'dashboard',
+  '/projects': 'projects',
+  '/project': 'projects',
   '/mail': 'mail',
   '/domains': 'domains',
   '/domain': 'domains',
@@ -26,6 +28,8 @@ const SECTION_MAP: Record<string, PortalSectionId> = {
 const KNOWN_PATHS = new Set([
   '/',
   '/dashboard',
+  '/projects',
+  '/project',
   '/mail',
   '/domains',
   '/domain',

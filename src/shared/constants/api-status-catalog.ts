@@ -22,7 +22,8 @@ export type ApiEndpointCategory =
   | 'two_factor'
   | 'auth'
   | 'backup'
-  | 'system';
+  | 'system'
+  | 'projects';
 
 export type SharedApiCategory = ApiEndpointCategory;
 
@@ -614,6 +615,7 @@ export function resolveApiStatusDescriptor(input: {
     auth: 'Auth & Session API',
     backup: 'Backup & Sync API',
     system: 'Domains & DNS API',
+    projects: 'Connected Projects Gateway',
   };
   const serviceName = categoryNameMap[cat] || 'Cloudflare Edge API';
 

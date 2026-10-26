@@ -2,6 +2,7 @@ import { Icon } from '@phosphor-icons/react';
 
 export type PortalSectionId =
   | 'dashboard'
+  | 'projects'
   | 'mail'
   | 'domains'
   | 'tmail'

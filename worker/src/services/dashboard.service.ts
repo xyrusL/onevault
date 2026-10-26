@@ -21,7 +21,7 @@ import type {
 export interface DashboardAuditLogDto {
   id: string;
   level: 'info' | 'warning' | 'error';
-  category: 'mail' | 'two_factor' | 'notes' | 'auth' | 'backup' | 'system';
+  category: 'mail' | 'two_factor' | 'notes' | 'auth' | 'backup' | 'system' | 'projects';
   title: string;
   message: string;
   details?: string | null;
@@ -35,7 +35,7 @@ export interface DashboardAuditLogDto {
 export interface ApiEndpointHealthDto {
   key?: string;
   name: string;
-  category: 'notes' | 'mail' | 'two_factor' | 'auth' | 'backup' | 'system';
+  category: 'notes' | 'mail' | 'two_factor' | 'auth' | 'backup' | 'system' | 'projects';
   path: string;
   status: 'operational' | 'degraded' | 'down';
   statusText?: string;

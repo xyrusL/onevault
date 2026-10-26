@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DashboardView } from '../features/dashboard';
+import { ProjectsView } from '../features/projects';
 import { MailView } from '../features/mail';
 import { DomainsView } from '../features/domains';
 import { NotesView } from '../features/notes';
@@ -39,6 +40,8 @@ export const AdminPortalRouter: React.FC<AdminPortalRouterProps> = ({
     switch (activeSection) {
       case 'dashboard':
         return <DashboardView onNavigate={handleSelectSection} />;
+      case 'projects':
+        return <ProjectsView />;
       case 'mail':
         return <MailView />;
       case 'domains':

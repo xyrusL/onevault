@@ -10,7 +10,10 @@ export default defineConfig({
   server: {
     // `npm run dev` (Vite) + `npm run dev:worker` (wrangler, port 8787) side by side
     proxy: {
-      '/api': 'http://localhost:8787',
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+      },
     },
   },
 });

@@ -1,4 +1,5 @@
 import {
+  Browsers,
   EnvelopeSimple,
   GearSix,
   Globe,
@@ -13,6 +14,11 @@ export const PORTAL_NAV_ITEMS: PortalNavItem[] = [
     id: 'dashboard',
     label: 'Dashboard',
     icon: SquaresFour,
+  },
+  {
+    id: 'projects',
+    label: 'Projects',
+    icon: Browsers,
   },
   {
     id: 'mail',

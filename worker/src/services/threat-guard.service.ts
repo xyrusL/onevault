@@ -52,6 +52,8 @@ const SCANNER_DISTINCT_404_THRESHOLD = 6; // 6+ distinct invalid pages in 60s = 
 const KNOWN_SPA_PATHS = new Set([
   '/',
   '/dashboard',
+  '/projects',
+  '/project',
   '/mail',
   '/domains',
   '/domain',
@@ -70,9 +72,11 @@ const KNOWN_API_PREFIXES = new Set([
   '/api/dashboard',
   '/api/domains',
   '/api/forward-targets',
+  '/api/gateway',
   '/api/mail',
   '/api/mail-inbox',
   '/api/notes',
+  '/api/projects',
   '/api/two-factor',
 ]);
 
@@ -1160,5 +1164,141 @@ export const threatGuardService = {
       recentActors: combinedActors,
       verificationSuite,
     };
+  },
+  /**
+   * Evaluates unknown route probes, honeypot decoys, and security telemetry for connected projects (e.g. GIGAMAXX).
+   * Fully applies all Behavioral Threat Defense layers (Honeypot, Scanners, Payloads, Rate-Limiting, 24/7 Monitoring).
+   */
+  inspectProjectRoute(input: {
+    projectSlug: string;
+    pathname: string;
+    ip: string;
+    userAgent: string;
+    countryCode?: string;
+    asnOrg?: string;
+  }): {
+    isThreat: boolean;
+    action: ImmuneActionState;
+    riskScore: number;
+    vector: string;
+    level: 'info' | 'warning' | 'error';
+    quarantineExpiresAt: string | null;
+  } {
+    const { projectSlug, pathname, ip, userAgent } = input;
+    const lower = pathname.toLowerCase();
+    const tag = `[${projectSlug.toUpperCase()}]`;
+
+    let profile = actorProfiles.get(ip);
+    if (!profile) {
+      profile = createBlankProfile(ip, userAgent, false);
+      profile.countryCode = input.countryCode || 'Global';
+      profile.countryName = input.countryCode || 'Global Viewer';
+      profile.asnOrg = input.asnOrg || 'Connected Project Network';
+      actorProfiles.set(ip, profile);
+      totalMonitoredActors += 1;
+    }
+
+    // Evaluate signal using core behavioral engine
+    evaluateSignalOnProfile(profile, {
+      ip,
+      pathname,
+      method: 'GET',
+      userAgent,
+      isAuthenticated: false,
+      isUnknown404Route: true,
+    });
+
+    const now = Date.now();
+
+    // 1. Canary Honeypot Decoy Trap for connected project
+    if (CANARY_HONEYPOT_PATTERNS.some((p) => p.test(lower))) {
+      profile.riskScore = 98;
+      profile.action = 'PENETRATION_BLOCK';
+      profile.detectionVector = `Canary Honeypot Trap ${tag} (${pathname})`;
+      profile.quarantineUntil = now + QUARANTINE_DURATION_MS * 3;
+      honeypotTrapsTriggered++;
+      penetrationAttemptsBlocked++;
+    }
+    // 2. Exploit Payload (SQLi / XSS / Traversal)
+    else if (PAYLOAD_PENETRATION_PATTERNS.some((p) => p.test(lower))) {
+      profile.riskScore = 92;
+      profile.action = 'PENETRATION_BLOCK';
+      profile.detectionVector = `Exploit Payload Attempt ${tag} (${pathname})`;
+      profile.quarantineUntil = now + QUARANTINE_DURATION_MS * 3;
+      penetrationAttemptsBlocked++;
+    }
+    // 3. Offensive Bot / Vulnerability Scanner Signature
+    else if (SCANNER_UA_PATTERNS.test(userAgent)) {
+      profile.riskScore = 95;
+      profile.action = 'PENETRATION_BLOCK';
+      profile.detectionVector = `Offensive Bot Scanner ${tag} (${summarizeUserAgent(userAgent)})`;
+      profile.quarantineUntil = now + QUARANTINE_DURATION_MS * 3;
+      pageScansIntercepted++;
+    }
+    // 4. Sensitive Endpoint Probes (admin, config, setup, etc.)
+    else {
+      const suspiciousWords = [
+        'admin',
+        'config',
+        'setup',
+        'backup',
+        'database',
+        'sql',
+        'php',
+        '.env',
+        '.git',
+      ];
+      if (suspiciousWords.some((word) => lower.includes(word))) {
+        profile.riskScore = Math.max(profile.riskScore, 75);
+        profile.action = 'TEMP_QUARANTINE';
+        profile.detectionVector = `Suspicious Route Enumeration ${tag} (${pathname})`;
+        profile.quarantineUntil = now + QUARANTINE_DURATION_MS;
+        pageScansIntercepted++;
+      } else if (profile.action === 'TEMP_QUARANTINE') {
+        profile.detectionVector = `Automated Page Scanner ${tag} (${profile.distinct404Paths.size} invalid pages)`;
+        pageScansIntercepted++;
+      } else if (profile.action === 'RATE_LIMITED') {
+        profile.detectionVector = `Excessive Route Probes ${tag} (${profile.distinct404Paths.size} invalid pages)`;
+        adaptiveRateLimitsTriggered++;
+      }
+    }
+
+    // Prepend project-tagged target to profile's recent targets list
+    const projectTarget = `${tag} ${pathname}`;
+    if (!profile.recentTargets.includes(projectTarget)) {
+      profile.recentTargets = [projectTarget, ...profile.recentTargets.filter((t) => t !== projectTarget)].slice(0, 6);
+    }
+
+    const isThreat = profile.action !== 'ALLOW' || profile.riskScore >= 40;
+    const level: 'info' | 'warning' | 'error' =
+      profile.action === 'PENETRATION_BLOCK' || profile.action === 'TEMP_QUARANTINE'
+        ? 'error'
+        : profile.action === 'RATE_LIMITED'
+        ? 'warning'
+        : 'info';
+
+    return {
+      isThreat,
+      action: profile.action,
+      riskScore: profile.riskScore,
+      vector: profile.detectionVector,
+      level,
+      quarantineExpiresAt:
+        profile.quarantineUntil > now
+          ? new Date(profile.quarantineUntil).toISOString()
+          : null,
+    };
+  },
+  isIpQuarantined(ip: string): { quarantined: boolean; reason?: string } {
+    const profile = actorProfiles.get(ip);
+    if (!profile) return { quarantined: false };
+    const now = Date.now();
+    if (
+      profile.action === 'PENETRATION_BLOCK' ||
+      (profile.action === 'TEMP_QUARANTINE' && profile.quarantineUntil > now)
+    ) {
+      return { quarantined: true, reason: profile.detectionVector };
+    }
+    return { quarantined: false };
   },
 };
