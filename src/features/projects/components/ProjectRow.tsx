@@ -11,6 +11,7 @@ import {
   Eye,
   Pulse,
   ShieldWarning,
+  ChartLineUp,
 } from '@phosphor-icons/react';
 import type { ProjectItem } from '../types/projects.types';
 
@@ -20,6 +21,7 @@ interface ProjectRowProps {
   onEdit: (project: ProjectItem) => void;
   onIntegrate: (project: ProjectItem) => void;
   onRequestDelete: (project: ProjectItem) => void;
+  onViewTelemetry?: (project: ProjectItem) => void;
 }
 
 export const ProjectRow: React.FC<ProjectRowProps> = ({
@@ -28,6 +30,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
   onEdit,
   onIntegrate,
   onRequestDelete,
+  onViewTelemetry,
 }) => {
   const isProtected = project.status === 'active';
   const isConnecting = project.status === 'connecting';
@@ -107,7 +110,11 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
       </div>
 
       {/* Col 3: Live Telemetry & D1 Stats (Col 2) */}
-      <div className="col-span-12 sm:col-span-2 flex items-center gap-3 sm:gap-4 text-xs font-mono">
+      <div
+        onClick={() => onViewTelemetry?.(project)}
+        className="col-span-12 sm:col-span-2 flex items-center gap-3 sm:gap-4 text-xs font-mono cursor-pointer hover:opacity-80 transition-opacity"
+        title="Click to view detailed user insights, watch minutes & device telemetry"
+      >
         <div className="flex items-center gap-1" title="Real requests today">
           <Pulse size={12} weight="bold" className="text-sky-400 shrink-0" />
           <span className="text-fg-primary font-semibold">
@@ -159,6 +166,18 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({
           >
             <Power size={11} weight="bold" />
             <span>{isProtected ? 'PROTECTED' : 'UNPLUGGED'}</span>
+          </button>
+        )}
+
+        {/* View Telemetry & User Insights */}
+        {onViewTelemetry && (
+          <button
+            type="button"
+            onClick={() => onViewTelemetry(project)}
+            title="View Live User Telemetry, Watch Minutes & Device Analytics"
+            className="p-1.5 rounded-md hover:bg-sky-500/10 border border-transparent hover:border-sky-500/25 text-fg-muted hover:text-sky-400 transition-all cursor-pointer"
+          >
+            <ChartLineUp size={13} weight="bold" />
           </button>
         )}
 

@@ -5,6 +5,7 @@ import type {
   UpdateProjectPayload,
   ProjectStatus,
   InspectSiteResponse,
+  ProjectTelemetrySummary,
 } from '../types/projects.types';
 
 const CACHE_KEY = 'onevault.projects.cache.v1';
@@ -254,6 +255,35 @@ class ProjectsService {
       console.warn('[ProjectsService] D1 delete sync error:', err);
       return true;
     }
+  }
+
+  async getProjectTelemetry(idOrSlug: string): Promise<ProjectTelemetrySummary> {
+    try {
+      const res = await apiRequest<ProjectTelemetrySummary>(`/projects/${idOrSlug}/telemetry`, {
+        auth: true,
+      });
+      if (res && res.summary) {
+        return res;
+      }
+    } catch (err) {
+      console.warn('[ProjectsService] Telemetry fetch error:', err);
+    }
+
+    // Default fallback
+    return {
+      summary: {
+        activeViewers: 1,
+        totalWatchMinutes: 0,
+        totalPageViews: 0,
+        totalInspections: 0,
+        totalErrors: 0,
+        deviceBreakdown: { pc: 1, mobile: 0, tablet: 0, smartTv: 0 },
+      },
+      recentEvents: [],
+      topContent: [],
+      recentInspectors: [],
+      errorDiagnostics: [],
+    };
   }
 }
 

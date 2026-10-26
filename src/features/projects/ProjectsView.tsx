@@ -13,6 +13,7 @@ import { projectsService } from './services/projects.service';
 import { ProjectRow } from './components/ProjectRow';
 import { ProjectConfigModal } from './components/ProjectConfigModal';
 import { ProjectIntegrationModal } from './components/ProjectIntegrationModal';
+import { ProjectTelemetryModal } from './components/ProjectTelemetryModal';
 import { UnplugModal } from './components/UnplugModal';
 import { DeleteProjectModal } from './components/DeleteProjectModal';
 import type {
@@ -32,6 +33,7 @@ export const ProjectsView: React.FC = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null);
   const [integratingProject, setIntegratingProject] = useState<ProjectItem | null>(null);
+  const [telemetryProject, setTelemetryProject] = useState<ProjectItem | null>(null);
   const [unplugCandidate, setUnplugCandidate] = useState<ProjectItem | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<ProjectItem | null>(null);
 
@@ -373,6 +375,7 @@ export const ProjectsView: React.FC = () => {
                   }}
                   onIntegrate={(p) => setIntegratingProject(p)}
                   onRequestDelete={(p) => setDeleteCandidate(p)}
+                  onViewTelemetry={(p) => setTelemetryProject(p)}
                 />
               ))}
             </div>
@@ -398,6 +401,13 @@ export const ProjectsView: React.FC = () => {
         onProjectUpdated={(updated) => {
           setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         }}
+      />
+
+      {/* Live Telemetry & User Insights Modal */}
+      <ProjectTelemetryModal
+        isOpen={Boolean(telemetryProject)}
+        onClose={() => setTelemetryProject(null)}
+        project={telemetryProject}
       />
 
       {/* Shared Reusable Modal: Unplug Confirmation */}

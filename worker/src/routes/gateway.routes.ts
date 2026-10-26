@@ -14,6 +14,8 @@ interface TelemetryBody {
   movieId?: string | number;
   season?: number;
   episode?: number;
+  watchMinutes?: number;
+  deviceType?: string;
   userAgent?: string;
   timestamp?: string;
   details?: Record<string, unknown>;
@@ -171,7 +173,8 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
 /**
  * POST /api/gateway/:slug/telemetry
  * Real-time 24/7 security & activity telemetry collector
- * Evaluates route scans, 404 probes, stream events and logs into D1 system_audit_logs
+ * Evaluates route scans, 404 probes, DevTools inspections, watch minutes, stream events & player errors
+ * Persists structured records into D1 project_telemetry_events & system_audit_logs
  */
 gatewayRoutes.post('/:slug/telemetry', async (c) => {
   const slug = c.req.param('slug').toLowerCase();
@@ -188,9 +191,39 @@ gatewayRoutes.post('/:slug/telemetry', async (c) => {
     '127.0.0.1';
   const cf = (c.req.raw as Request & { cf?: IncomingRequestCfProperties }).cf;
   const country = (cf?.country as string) || 'Global';
+  const city = (cf?.city as string) || '';
   const asnOrg = (cf?.asOrganization as string) || 'Client Network';
   const userAgent = body.userAgent || c.req.header('User-Agent') || 'Unknown';
   const now = new Date().toISOString();
+
+  // 1. Device Type Detection (PC, Mobile, Tablet, Smart TV, Console)
+  const uaLower = userAgent.toLowerCase();
+  let deviceType = (body.deviceType || '').toLowerCase();
+  if (!deviceType || deviceType === 'unknown') {
+    if (
+      uaLower.includes('smart-tv') ||
+      uaLower.includes('smarttv') ||
+      uaLower.includes('tizen') ||
+      uaLower.includes('webos') ||
+      uaLower.includes('appletv') ||
+      uaLower.includes('googletv') ||
+      uaLower.includes('roku') ||
+      uaLower.includes('hbbtv') ||
+      uaLower.includes('viera') ||
+      uaLower.includes('bravia') ||
+      uaLower.includes('firetv')
+    ) {
+      deviceType = 'smart_tv';
+    } else if (uaLower.includes('playstation') || uaLower.includes('xbox') || uaLower.includes('nintendo')) {
+      deviceType = 'console';
+    } else if (uaLower.includes('ipad') || uaLower.includes('tablet')) {
+      deviceType = 'tablet';
+    } else if (uaLower.includes('mobile') || uaLower.includes('iphone') || uaLower.includes('android')) {
+      deviceType = 'mobile';
+    } else {
+      deviceType = 'pc';
+    }
+  }
 
   let logCategory = 'projects';
   let logLevel: 'info' | 'warning' | 'error' = 'info';
@@ -199,8 +232,15 @@ gatewayRoutes.post('/:slug/telemetry', async (c) => {
   let isSecurityThreat = false;
   let threatAction = 'ALLOW';
 
-  // 1. Inspect 404 Probes & Unknown Route Scans through Threat Guard
-  if (body.event === '404_error' && body.path) {
+  // 2. Classify Telemetry Event & Inspect Security Probes
+  if (body.event === 'devtools_inspect') {
+    isSecurityThreat = true;
+    logLevel = 'warning';
+    threatAction = 'FLAGGED';
+    const trigger = (body.details?.trigger as string) || 'keyboard_or_resize';
+    logTitle = `[${projectName}] DevTools Inspection Probed: ${clientIp} (${country})`;
+    logMessage = `User at ${clientIp} (${country}) probed DevTools on "${body.path || '/'}" using [${trigger}]. Client Device: ${deviceType.toUpperCase()}.`;
+  } else if (body.event === '404_error' && body.path) {
     const evaluation = threatGuardService.inspectProjectRoute({
       projectSlug: slug,
       pathname: body.path,
@@ -225,59 +265,188 @@ gatewayRoutes.post('/:slug/telemetry', async (c) => {
   } else if (body.event === 'stream_start') {
     logLevel = 'info';
     logTitle = `[${projectName}] Stream Started: ${body.title || '4K Video'}`;
-    logMessage = `Viewer in ${country} started streaming "${body.title || 'Media'}" (${body.category || 'movie'}${
+    logMessage = `Viewer in ${country} (${deviceType.toUpperCase()}) started streaming "${body.title || 'Media'}" (${body.category || 'movie'}${
       body.season ? ` S${body.season}:E${body.episode}` : ''
     }).`;
-  } else if (body.event === 'stream_error') {
+  } else if (body.event === 'stream_heartbeat' || body.event === 'stream_watch') {
+    logLevel = 'info';
+    logTitle = `[${projectName}] Watching: ${body.title || 'Media'} (${Math.round(body.watchMinutes || 1)}m)`;
+    logMessage = `Viewer in ${country} on ${deviceType.toUpperCase()} reached ${Math.round(body.watchMinutes || 1)} minutes on "${body.title || 'Media'}".`;
+  } else if (body.event === 'player_error' || body.event === 'stream_error') {
     logLevel = 'error';
-    logTitle = `[${projectName}] Stream Playback Error`;
-    logMessage = `Playback failed on "${body.title || 'Media'}": ${JSON.stringify(body.details || {})}`;
+    logTitle = `[${projectName}] Player Playback Error`;
+    logMessage = `Playback failed on "${body.title || 'Media'}" (${deviceType.toUpperCase()}): ${JSON.stringify(body.details || {})}`;
+  } else if (body.event === 'network_offline') {
+    logLevel = 'warning';
+    logTitle = `[${projectName}] Client Network Drop / Offline`;
+    logMessage = `Client connection dropped while navigating "${body.path || '/'}".`;
   } else if (body.event === 'page_view') {
     logLevel = 'info';
-    logTitle = `[${projectName}] Visitor Arrival`;
-    logMessage = `Visitor from ${country} navigated to ${body.path || '/'}.`;
+    logTitle = `[${projectName}] Visitor Navigation`;
+    logMessage = `Visitor from ${country} (${deviceType.toUpperCase()}) viewed "${body.title || body.path || '/'}".`;
   }
 
-  // 2. Persist to D1 system_audit_logs with Quota Shield Protection:
-  // To protect Cloudflare Free Tier (100k daily writes), only write security threats,
-  // 404 probes, and stream milestones to D1. Routine page_views are kept in-memory.
-  const shouldWriteToAuditLog =
-    isSecurityThreat ||
-    body.event === '404_error' ||
-    body.event === 'stream_start' ||
-    body.event === 'stream_error';
-
-  if (c.env?.DB && shouldWriteToAuditLog) {
-    const logId = `proj_${crypto.randomUUID()}`;
-    const logDetails = JSON.stringify({
-      project: slug,
-      event: body.event,
-      path: body.path || null,
-      title: body.title || null,
-      clientIp,
-      country,
-      userAgent,
-      threatAction,
-      isThreat: isSecurityThreat,
-      timestamp: now,
-    });
+  // 3. Persist Event into Cloudflare D1 project_telemetry_events & update project stats
+  if (c.env?.DB) {
+    const eventId = `telem_${crypto.randomUUID()}`;
+    const watchMins = Number(body.watchMinutes) || 0;
+    const mediaIdStr = body.movieId !== undefined ? String(body.movieId) : null;
+    const detailsJson = JSON.stringify(body.details || {});
 
     c.executionCtx.waitUntil(
-      c.env.DB.prepare(
-        `INSERT INTO system_audit_logs (id, level, category, title, message, details, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(logId, logLevel, logCategory, logTitle, logMessage, logDetails, now)
-        .run()
-        .catch((err) => {
-          console.warn('[OneVault Gateway] Audit logging error:', err);
-        })
+      (async () => {
+        try {
+          // Auto-ensure telemetry table exists
+          await c.env.DB.prepare(
+            `CREATE TABLE IF NOT EXISTS project_telemetry_events (
+              id                  TEXT PRIMARY KEY,
+              project_slug        TEXT NOT NULL,
+              event_type          TEXT NOT NULL,
+              title               TEXT,
+              path                TEXT,
+              category            TEXT,
+              media_id            TEXT,
+              season              INTEGER,
+              episode             INTEGER,
+              watch_minutes       REAL DEFAULT 0,
+              device_type         TEXT NOT NULL DEFAULT 'pc',
+              client_ip           TEXT NOT NULL DEFAULT '127.0.0.1',
+              country             TEXT NOT NULL DEFAULT 'Global',
+              city                TEXT,
+              asn_org             TEXT,
+              user_agent          TEXT,
+              details             TEXT DEFAULT '{}',
+              created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            )`
+          ).run();
+
+          // Insert telemetry record
+          await c.env.DB.prepare(
+            `INSERT INTO project_telemetry_events (
+              id, project_slug, event_type, title, path, category, media_id, season, episode,
+              watch_minutes, device_type, client_ip, country, city, asn_org, user_agent, details, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+            .bind(
+              eventId,
+              slug,
+              body.event,
+              body.title || null,
+              body.path || null,
+              body.category || null,
+              mediaIdStr,
+              body.season || null,
+              body.episode || null,
+              watchMins,
+              deviceType,
+              clientIp,
+              country,
+              city,
+              asnOrg,
+              userAgent,
+              detailsJson,
+              now
+            )
+            .run();
+
+          // Update Project's Live Stats in connected_projects
+          const projectRow = await c.env.DB.prepare(
+            'SELECT id, stats FROM connected_projects WHERE slug = ?'
+          )
+            .bind(slug)
+            .first<{ id: string; stats: string }>();
+
+          if (projectRow) {
+            let statsObj: {
+              activeViewers?: number;
+              totalRequestsToday?: number;
+              blockedThreatsToday?: number;
+              avgLatencyMs?: number;
+              totalWatchMinutes?: number;
+              totalInspections?: number;
+              totalErrors?: number;
+              deviceBreakdown?: Record<string, number>;
+            } = {};
+
+            try {
+              statsObj = JSON.parse(projectRow.stats || '{}');
+            } catch {
+              statsObj = {};
+            }
+
+            statsObj.totalRequestsToday = (statsObj.totalRequestsToday || 0) + 1;
+            if (watchMins > 0) {
+              statsObj.totalWatchMinutes = (statsObj.totalWatchMinutes || 0) + watchMins;
+            }
+            if (isSecurityThreat) {
+              statsObj.blockedThreatsToday = (statsObj.blockedThreatsToday || 0) + 1;
+            }
+            if (body.event === 'devtools_inspect') {
+              statsObj.totalInspections = (statsObj.totalInspections || 0) + 1;
+            }
+            if (body.event === 'player_error' || body.event === 'stream_error') {
+              statsObj.totalErrors = (statsObj.totalErrors || 0) + 1;
+            }
+
+            // Update Device Breakdown counts
+            statsObj.deviceBreakdown = statsObj.deviceBreakdown || { pc: 0, mobile: 0, tablet: 0, smart_tv: 0 };
+            const normalizedDev = deviceType === 'smart_tv' ? 'smart_tv' : deviceType === 'tablet' ? 'tablet' : deviceType === 'mobile' ? 'mobile' : 'pc';
+            statsObj.deviceBreakdown[normalizedDev] = (statsObj.deviceBreakdown[normalizedDev] || 0) + 1;
+
+            await c.env.DB.prepare(
+              'UPDATE connected_projects SET stats = ?, last_seen_at = ?, updated_at = ? WHERE id = ?'
+            )
+              .bind(JSON.stringify(statsObj), now, now, projectRow.id)
+              .run();
+          }
+
+          // Also mirror notable security/stream events into system_audit_logs
+          const shouldWriteToAuditLog =
+            isSecurityThreat ||
+            body.event === 'devtools_inspect' ||
+            body.event === '404_error' ||
+            body.event === 'stream_start' ||
+            body.event === 'player_error';
+
+          if (shouldWriteToAuditLog) {
+            const auditId = `proj_${crypto.randomUUID()}`;
+            await c.env.DB.prepare(
+              `INSERT INTO system_audit_logs (id, level, category, title, message, details, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`
+            )
+              .bind(
+                auditId,
+                logLevel,
+                logCategory,
+                logTitle,
+                logMessage,
+                JSON.stringify({
+                  project: slug,
+                  event: body.event,
+                  deviceType,
+                  title: body.title,
+                  path: body.path,
+                  clientIp,
+                  country,
+                  city,
+                  userAgent,
+                  timestamp: now,
+                }),
+                now
+              )
+              .run();
+          }
+        } catch (err) {
+          console.warn('[OneVault Gateway] Telemetry processing error:', err);
+        }
+      })()
     );
   }
 
   return c.json({
     ok: true,
     logged: true,
+    device: deviceType,
     threatDetected: isSecurityThreat,
     action: threatAction,
     timestamp: now,

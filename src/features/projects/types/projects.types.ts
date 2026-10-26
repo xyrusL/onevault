@@ -82,3 +82,61 @@ export interface HandshakeResponse {
   verified: boolean;
   message: string;
 }
+
+export type DeviceType = 'pc' | 'mobile' | 'tablet' | 'smart_tv' | 'console' | 'unknown';
+
+export type TelemetryEventType =
+  | 'page_view'
+  | 'stream_start'
+  | 'stream_heartbeat'
+  | 'stream_watch'
+  | 'devtools_inspect'
+  | '404_error'
+  | 'player_error'
+  | 'network_offline';
+
+export interface TelemetryEventItem {
+  id: string;
+  projectSlug: string;
+  eventType: TelemetryEventType | string;
+  title?: string;
+  path?: string;
+  category?: string;
+  mediaId?: string;
+  season?: number;
+  episode?: number;
+  watchMinutes: number;
+  deviceType: DeviceType | string;
+  clientIp: string;
+  country: string;
+  city?: string;
+  asnOrg?: string;
+  userAgent?: string;
+  details?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ProjectTelemetrySummary {
+  summary: {
+    activeViewers: number;
+    totalWatchMinutes: number;
+    totalPageViews: number;
+    totalInspections: number;
+    totalErrors: number;
+    deviceBreakdown: {
+      pc: number;
+      mobile: number;
+      tablet: number;
+      smartTv: number;
+    };
+  };
+  recentEvents: TelemetryEventItem[];
+  topContent: Array<{
+    title: string;
+    category?: string;
+    totalMinutes: number;
+    views: number;
+  }>;
+  recentInspectors: TelemetryEventItem[];
+  errorDiagnostics: TelemetryEventItem[];
+}

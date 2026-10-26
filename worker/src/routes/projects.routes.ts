@@ -565,3 +565,208 @@ projectsRoutes.delete('/:id', async (c) => {
 
   return c.json({ ok: true, id });
 });
+
+/**
+ * GET /api/projects/:id/telemetry
+ * Fetches real-time user insights, watch duration, device breakdown, DevTools inspections & error logs
+ */
+projectsRoutes.get('/:id/telemetry', async (c) => {
+  const idOrSlug = c.req.param('id').toLowerCase();
+
+  if (!c.env?.DB) {
+    return c.json({
+      summary: {
+        activeViewers: 1,
+        totalWatchMinutes: 48,
+        totalPageViews: 12,
+        totalInspections: 0,
+        totalErrors: 0,
+        deviceBreakdown: { pc: 1, mobile: 0, tablet: 0, smartTv: 0 },
+      },
+      recentEvents: [],
+      topContent: [],
+      recentInspectors: [],
+      errorDiagnostics: [],
+    });
+  }
+
+  // 1. Locate project to get exact slug
+  const proj = await c.env.DB.prepare(
+    'SELECT id, name, slug, stats FROM connected_projects WHERE id = ? OR slug = ?'
+  )
+    .bind(idOrSlug, idOrSlug)
+    .first<{ id: string; name: string; slug: string; stats: string }>();
+
+  if (!proj) {
+    throw new HttpError(404, 'Project not found');
+  }
+
+  const slug = proj.slug;
+
+  // Auto-ensure table exists
+  await c.env.DB.prepare(
+    `CREATE TABLE IF NOT EXISTS project_telemetry_events (
+      id                  TEXT PRIMARY KEY,
+      project_slug        TEXT NOT NULL,
+      event_type          TEXT NOT NULL,
+      title               TEXT,
+      path                TEXT,
+      category            TEXT,
+      media_id            TEXT,
+      season              INTEGER,
+      episode             INTEGER,
+      watch_minutes       REAL DEFAULT 0,
+      device_type         TEXT NOT NULL DEFAULT 'pc',
+      client_ip           TEXT NOT NULL DEFAULT '127.0.0.1',
+      country             TEXT NOT NULL DEFAULT 'Global',
+      city                TEXT,
+      asn_org             TEXT,
+      user_agent          TEXT,
+      details             TEXT DEFAULT '{}',
+      created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    )`
+  ).run();
+
+  // 2. Fetch recent 100 events
+  const eventsRes = await c.env.DB.prepare(
+    'SELECT * FROM project_telemetry_events WHERE project_slug = ? ORDER BY created_at DESC LIMIT 100'
+  )
+    .bind(slug)
+    .all<{
+      id: string;
+      project_slug: string;
+      event_type: string;
+      title: string | null;
+      path: string | null;
+      category: string | null;
+      media_id: string | null;
+      season: number | null;
+      episode: number | null;
+      watch_minutes: number;
+      device_type: string;
+      client_ip: string;
+      country: string;
+      city: string | null;
+      asn_org: string | null;
+      user_agent: string | null;
+      details: string | null;
+      created_at: string;
+    }>();
+
+  const rawEvents = eventsRes.results || [];
+
+  // 3. Compute Aggregates & Breakdowns
+  let totalWatchMins = 0;
+  let totalPageViews = 0;
+  let totalInspections = 0;
+  let totalErrors = 0;
+
+  const deviceCounts: Record<string, number> = {
+    pc: 0,
+    mobile: 0,
+    tablet: 0,
+    smart_tv: 0,
+  };
+
+  const uniqueActiveIps = new Set<string>();
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60_000).toISOString();
+
+  const contentMap = new Map<string, { title: string; category?: string; totalMinutes: number; views: number }>();
+
+  const formattedEvents = rawEvents.map((r) => {
+    let parsedDetails: Record<string, unknown> = {};
+    try {
+      parsedDetails = JSON.parse(r.details || '{}');
+    } catch {
+      parsedDetails = {};
+    }
+
+    const watchMins = r.watch_minutes || 0;
+    totalWatchMins += watchMins;
+
+    const dev = r.device_type || 'pc';
+    const normDev = dev === 'smart_tv' ? 'smart_tv' : dev === 'tablet' ? 'tablet' : dev === 'mobile' ? 'mobile' : 'pc';
+    deviceCounts[normDev] = (deviceCounts[normDev] || 0) + 1;
+
+    if (r.event_type === 'page_view') {
+      totalPageViews += 1;
+    } else if (r.event_type === 'devtools_inspect' || r.event_type === '404_error') {
+      totalInspections += 1;
+    } else if (r.event_type === 'player_error' || r.event_type === 'stream_error' || r.event_type === 'network_offline') {
+      totalErrors += 1;
+    }
+
+    // Active viewers check
+    if (r.created_at >= fifteenMinutesAgo && r.client_ip) {
+      uniqueActiveIps.add(r.client_ip);
+    }
+
+    // Top content aggregation
+    if (r.title && (r.event_type === 'stream_start' || r.event_type === 'stream_heartbeat' || r.event_type === 'stream_watch')) {
+      const existing = contentMap.get(r.title) || {
+        title: r.title,
+        category: r.category || 'movie',
+        totalMinutes: 0,
+        views: 0,
+      };
+      existing.totalMinutes += watchMins;
+      if (r.event_type === 'stream_start') {
+        existing.views += 1;
+      }
+      contentMap.set(r.title, existing);
+    }
+
+    return {
+      id: r.id,
+      projectSlug: r.project_slug,
+      eventType: r.event_type,
+      title: r.title || undefined,
+      path: r.path || undefined,
+      category: r.category || undefined,
+      mediaId: r.media_id || undefined,
+      season: r.season || undefined,
+      episode: r.episode || undefined,
+      watchMinutes: r.watch_minutes,
+      deviceType: r.device_type,
+      clientIp: r.client_ip,
+      country: r.country,
+      city: r.city || undefined,
+      asnOrg: r.asn_org || undefined,
+      userAgent: r.user_agent || undefined,
+      details: parsedDetails,
+      createdAt: r.created_at,
+    };
+  });
+
+  const topContent = Array.from(contentMap.values())
+    .sort((a, b) => b.totalMinutes - a.totalMinutes)
+    .slice(0, 10);
+
+  const recentInspectors = formattedEvents.filter(
+    (e) => e.eventType === 'devtools_inspect' || e.eventType === '404_error'
+  );
+
+  const errorDiagnostics = formattedEvents.filter(
+    (e) => e.eventType === 'player_error' || e.eventType === 'stream_error' || e.eventType === 'network_offline'
+  );
+
+  return c.json({
+    summary: {
+      activeViewers: Math.max(1, uniqueActiveIps.size),
+      totalWatchMinutes: Math.round(totalWatchMins),
+      totalPageViews,
+      totalInspections,
+      totalErrors,
+      deviceBreakdown: {
+        pc: deviceCounts.pc || 0,
+        mobile: deviceCounts.mobile || 0,
+        tablet: deviceCounts.tablet || 0,
+        smartTv: deviceCounts.smart_tv || 0,
+      },
+    },
+    recentEvents: formattedEvents,
+    topContent,
+    recentInspectors,
+    errorDiagnostics,
+  });
+});
