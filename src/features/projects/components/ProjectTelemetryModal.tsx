@@ -62,12 +62,12 @@ export const ProjectTelemetryModal: React.FC<ProjectTelemetryModalProps> = ({
   if (!project) return null;
 
   const summary = telemetry?.summary || {
-    activeViewers: project.stats.activeViewers || 1,
+    activeViewers: project.stats.activeViewers ?? 0,
     totalWatchMinutes: 0,
     totalPageViews: project.stats.totalRequestsToday || 0,
     totalInspections: 0,
     totalErrors: 0,
-    deviceBreakdown: { pc: 1, mobile: 0, tablet: 0, smartTv: 0 },
+    deviceBreakdown: { pc: 0, mobile: 0, tablet: 0, smartTv: 0 },
   };
 
   const totalDevices =
@@ -136,10 +136,20 @@ export const ProjectTelemetryModal: React.FC<ProjectTelemetryModalProps> = ({
               <span>Active Viewers</span>
             </span>
             <div className="flex items-baseline gap-1.5 mt-1">
-              <span className="text-lg font-bold font-mono text-emerald-400">
+              <span
+                className={`text-lg font-bold font-mono ${
+                  summary.activeViewers > 0 ? 'text-emerald-400' : 'text-fg-muted'
+                }`}
+              >
                 {summary.activeViewers}
               </span>
-              <span className="text-[10px] text-emerald-500/80 font-semibold">Live Now</span>
+              <span
+                className={`text-[10px] font-semibold ${
+                  summary.activeViewers > 0 ? 'text-emerald-500/80' : 'text-fg-muted'
+                }`}
+              >
+                {summary.activeViewers > 0 ? 'Live Now' : 'Idle'}
+              </span>
             </div>
           </div>
 

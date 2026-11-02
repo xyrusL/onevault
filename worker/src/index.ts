@@ -100,9 +100,88 @@ app.get('/.well-known/webauthn', (c) => {
   });
 });
 
-// Public
+// Public Edge & Connected Project Routes
 app.route('/api/auth', authRoutes);
 app.route('/api/gateway', gatewayRoutes);
+app.route('/api/projects', gatewayRoutes);
+
+// Root OneVault API Guide & Live Status
+const renderApiOverview = (c: import('hono').Context<AppBindings>) => {
+  const origin = new URL(c.req.url).origin;
+  const cf = (c.req.raw as Request & { cf?: IncomingRequestCfProperties }).cf;
+  const edgeColo = (cf?.colo as string) || 'Cloudflare Edge';
+  const edgeCountry = (cf?.country as string) || 'Global';
+
+  return c.json({
+    name: 'OneVault Universal Security Gateway & Edge Shield API',
+    status: 'operational',
+    version: '2.0.0',
+    edge: {
+      location: edgeColo,
+      region: edgeCountry,
+      status: 'Active & Protected',
+      threatGuard: 'Behavioral IPS 24/7 Monitoring',
+    },
+    message: 'Welcome to the OneVault Universal Edge API. Connect web apps, streaming platforms, and APIs in seconds.',
+    quickStart: {
+      description: 'Connected applications only need the Base URL and Project Gateway Token in their environment:',
+      envExample: {
+        VITE_ONEVAULT_BASE_URL: origin,
+        VITE_ONEVAULT_PROJECT: 'your_project_slug',
+        VITE_ONEVAULT_TOKEN: 'ov_live_your_project_token_here',
+      },
+    },
+    authenticationGuide: {
+      header: 'X-OneVault-Token: ov_live_...',
+      bodyFallback: '{ "token": "ov_live_..." }',
+      howToSetup: `Open OneVault Dashboard at ${origin}/dashboard -> Connected Projects -> Copy Gateway Token.`,
+    },
+    publicProjectEndpoints: [
+      {
+        path: '/api/projects/:slug/handshake',
+        method: 'POST',
+        auth: 'Required (X-OneVault-Token)',
+        description: 'Verifies project token and turns project status green in the OneVault dashboard.',
+      },
+      {
+        path: '/api/projects/:slug/events',
+        method: 'POST',
+        auth: 'Optional / Recommended',
+        description: 'Ingests active streaming heartbeats, unique viewer sessions, page views, and diagnostics.',
+      },
+      {
+        path: '/api/projects/:slug/config',
+        method: 'GET',
+        auth: 'None (Public Edge)',
+        description: 'Syncs active shield policy, allowed origins, and maintenance status.',
+      },
+      {
+        path: '/api/projects/:slug/stream',
+        method: 'GET',
+        auth: 'Allowed Origin Verified',
+        description: 'Concealed stream token signer with Threat Guard inspection.',
+      },
+      {
+        path: '/api/projects/:slug/proxy/*',
+        method: 'ALL',
+        auth: 'Allowed Origin Verified',
+        description: 'Reverse proxy that conceals upstream streaming endpoints and strips server signatures.',
+      },
+      {
+        path: '/api/projects/api',
+        method: 'GET',
+        auth: 'None',
+        description: 'Returns machine-readable JSON schema for all project endpoints.',
+      },
+    ],
+    timestamp: new Date().toISOString(),
+  });
+};
+
+app.get('/api', renderApiOverview);
+app.get('/api/', renderApiOverview);
+app.get('/api/status', renderApiOverview);
+app.get('/api/guide', renderApiOverview);
 
 // Everything below requires a signed session token
 app.use('/api/*', requireAuth);
@@ -165,13 +244,40 @@ app.onError((err, c) => {
   }
 
   if (isHttpError) {
-    return c.json({ error: err.message }, err.status as 400);
+    if (status === 401) {
+      const origin = new URL(c.req.url).origin;
+      return c.json(
+        {
+          ok: false,
+          status: 401,
+          error: 'Unauthorized',
+          message: err.message || 'Authentication required.',
+          help:
+            'Please provide a valid token. For connected projects (e.g. streaming frontends), pass the X-OneVault-Token header. For admin routes, sign in at /api/auth/login.',
+          apiGuide: `${origin}/api`,
+        },
+        401
+      );
+    }
+    return c.json({ ok: false, error: err.message }, err.status as 400);
   }
   console.error(err);
-  return c.json({ error: 'Internal server error' }, 500);
+  return c.json({ ok: false, error: 'Internal server error' }, 500);
 });
 
-app.notFound((c) => c.json({ error: 'Not found' }, 404));
+app.notFound((c) => {
+  const origin = new URL(c.req.url).origin;
+  return c.json(
+    {
+      ok: false,
+      status: 404,
+      error: 'Endpoint Not Found',
+      message: `The requested path [${new URL(c.req.url).pathname}] does not exist on this OneVault Edge node.`,
+      apiGuide: `${origin}/api`,
+    },
+    404
+  );
+});
 
 export default {
   fetch: app.fetch,

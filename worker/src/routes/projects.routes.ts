@@ -173,7 +173,6 @@ projectsRoutes.get('/', async (c) => {
       if (c.env?.DB) {
         try {
           const oneDayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-          const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
           // 1. Total real requests today for this project
           const reqCount = await c.env.DB.prepare(
@@ -193,24 +192,29 @@ projectsRoutes.get('/', async (c) => {
             .bind(`%"project":"${row.slug}"%`, oneDayAgo)
             .first<{ c: number }>();
 
-          // 3. Real active viewers in last 15 mins
-          const activeCount = await c.env.DB.prepare(
-            `SELECT COUNT(DISTINCT json_extract(details, '$.clientIp')) as c 
-             FROM system_audit_logs 
-             WHERE details LIKE ? AND created_at >= ?`
-          )
-            .bind(`%"project":"${row.slug}"%`, fifteenMinsAgo)
-            .first<{ c: number }>();
+          // 3. Real active streaming viewers in last 2 minutes (tracked by session_id / details.sessionId)
+          const twoMinsAgo = new Date(Date.now() - 120_000).toISOString();
+          let activeCountVal = 0;
+          try {
+            const activeCount = await c.env.DB.prepare(
+              `SELECT COUNT(DISTINCT COALESCE(session_id, json_extract(details, '$.sessionId'), client_ip)) as c 
+               FROM project_telemetry_events 
+               WHERE project_slug = ? AND event_type IN ('stream_start', 'stream_heartbeat') AND created_at >= ?`
+            )
+              .bind(row.slug, twoMinsAgo)
+              .first<{ c: number }>();
+            activeCountVal = activeCount?.c ?? 0;
+          } catch {
+            activeCountVal = 0;
+          }
 
-          if (reqCount && reqCount.c > 0) {
+          if (reqCount && reqCount.c >= 0) {
             stats.totalRequestsToday = reqCount.c;
           }
           if (threatCount && threatCount.c >= 0) {
             stats.blockedThreatsToday = threatCount.c;
           }
-          if (activeCount && activeCount.c > 0) {
-            stats.activeViewers = activeCount.c;
-          }
+          stats.activeViewers = activeCountVal;
         } catch {
           // Gracefully keep cached stats
         }
@@ -576,12 +580,12 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
   if (!c.env?.DB) {
     return c.json({
       summary: {
-        activeViewers: 1,
-        totalWatchMinutes: 48,
-        totalPageViews: 12,
+        activeViewers: 0,
+        totalWatchMinutes: 0,
+        totalPageViews: 0,
         totalInspections: 0,
         totalErrors: 0,
-        deviceBreakdown: { pc: 1, mobile: 0, tablet: 0, smartTv: 0 },
+        deviceBreakdown: { pc: 0, mobile: 0, tablet: 0, smartTv: 0 },
       },
       recentEvents: [],
       topContent: [],
@@ -603,11 +607,12 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
 
   const slug = proj.slug;
 
-  // Auto-ensure table exists
+  // Auto-ensure table exists with session_id support
   await c.env.DB.prepare(
     `CREATE TABLE IF NOT EXISTS project_telemetry_events (
       id                  TEXT PRIMARY KEY,
       project_slug        TEXT NOT NULL,
+      session_id          TEXT,
       event_type          TEXT NOT NULL,
       title               TEXT,
       path                TEXT,
@@ -627,6 +632,10 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
     )`
   ).run();
 
+  await c.env.DB.prepare('ALTER TABLE project_telemetry_events ADD COLUMN session_id TEXT')
+    .run()
+    .catch(() => {});
+
   // 2. Fetch recent 100 events
   const eventsRes = await c.env.DB.prepare(
     'SELECT * FROM project_telemetry_events WHERE project_slug = ? ORDER BY created_at DESC LIMIT 100'
@@ -635,6 +644,7 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
     .all<{
       id: string;
       project_slug: string;
+      session_id?: string | null;
       event_type: string;
       title: string | null;
       path: string | null;
@@ -668,8 +678,8 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
     smart_tv: 0,
   };
 
-  const uniqueActiveIps = new Set<string>();
-  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60_000).toISOString();
+  const uniqueActiveSessions = new Set<string>();
+  const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
 
   const contentMap = new Map<string, { title: string; category?: string; totalMinutes: number; views: number }>();
 
@@ -696,9 +706,19 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
       totalErrors += 1;
     }
 
-    // Active viewers check
-    if (r.created_at >= fifteenMinutesAgo && r.client_ip) {
-      uniqueActiveIps.add(r.client_ip);
+    // Active viewers check: Accurate distinct session_id across same Wi-Fi / IP in last 2 minutes
+    const sessionKey =
+      r.session_id ||
+      (typeof parsedDetails.sessionId === 'string' ? parsedDetails.sessionId : null) ||
+      (typeof parsedDetails.session_id === 'string' ? parsedDetails.session_id : null) ||
+      r.client_ip;
+
+    if (
+      r.created_at >= twoMinutesAgo &&
+      (r.event_type === 'stream_start' || r.event_type === 'stream_heartbeat') &&
+      sessionKey
+    ) {
+      uniqueActiveSessions.add(sessionKey);
     }
 
     // Top content aggregation
@@ -752,7 +772,7 @@ projectsRoutes.get('/:id/telemetry', async (c) => {
 
   return c.json({
     summary: {
-      activeViewers: Math.max(1, uniqueActiveIps.size),
+      activeViewers: uniqueActiveSessions.size,
       totalWatchMinutes: Math.round(totalWatchMins),
       totalPageViews,
       totalInspections,

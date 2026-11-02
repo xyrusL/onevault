@@ -7,6 +7,7 @@ export const gatewayRoutes = new Hono<AppBindings>();
 
 interface TelemetryBody {
   app?: string;
+  sessionId?: string;
   event: string;
   path?: string;
   title?: string;
@@ -20,6 +21,101 @@ interface TelemetryBody {
   timestamp?: string;
   details?: Record<string, unknown>;
 }
+
+/**
+ * Universal Project API Catalog Handler
+ * Returns clear documentation & endpoint schema for client applications
+ */
+const getProjectApiCatalog = (c: Context<AppBindings>) => {
+  const origin = new URL(c.req.url).origin;
+  const slugParam = c.req.param('slug');
+  const projectSlug = slugParam ? slugParam.toLowerCase() : '{project_slug}';
+
+  return c.json({
+    name: 'OneVault Universal Project & Edge Shield API',
+    version: '2.0.0',
+    baseUrl: origin,
+    description:
+      'Universal edge API for connected web apps, streaming platforms, and client frontends. Connect with only your Base URL + Token.',
+    endpoints: [
+      {
+        id: 'handshake',
+        name: 'Project Handshake & Pairing',
+        method: 'POST',
+        path: `/api/projects/${projectSlug}/handshake`,
+        alias: `/api/gateway/${projectSlug}/handshake`,
+        description: 'Verify project token and establish live connection status in OneVault dashboard.',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-OneVault-Token': 'Project secret gateway token',
+        },
+        payloadExample: {
+          token: 'ov_live_your_token_here',
+        },
+      },
+      {
+        id: 'events',
+        name: 'Telemetry & User Insights Ingestion',
+        method: 'POST',
+        path: `/api/projects/${projectSlug}/events`,
+        aliases: [`/api/projects/${projectSlug}/event`, `/api/gateway/${projectSlug}/event`],
+        description: 'Ingest active streaming heartbeats, unique viewer sessions, page views, and diagnostics.',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-OneVault-Token': 'Optional or Project secret gateway token',
+        },
+        payloadExample: {
+          app: 'gigamaxx',
+          sessionId: 'sess_12345678-abcd',
+          event: 'stream_heartbeat',
+          title: 'The Deliverance',
+          category: 'movie',
+          watchMinutes: 1.5,
+          deviceType: 'mobile',
+          details: {},
+        },
+        supportedEvents: [
+          'stream_start',
+          'stream_heartbeat',
+          'stream_watch',
+          'page_view',
+          'devtools_inspect',
+          '404_error',
+          'player_error',
+          'network_offline',
+        ],
+      },
+      {
+        id: 'config',
+        name: 'Project Configuration & Shield Policy',
+        method: 'GET',
+        path: `/api/projects/${projectSlug}/config`,
+        alias: `/api/gateway/${projectSlug}/config`,
+        description: 'Sync active shield policy, allowed origins, and maintenance status.',
+      },
+      {
+        id: 'stream',
+        name: 'Concealed Stream Token Signer',
+        method: 'GET',
+        path: `/api/projects/${projectSlug}/stream?src={encoded_url}`,
+        alias: `/api/gateway/${projectSlug}/stream`,
+        description: 'Obfuscate video source URLs and issue signed temporary streaming tokens.',
+      },
+      {
+        id: 'proxy',
+        name: 'Concealed Edge Reverse Proxy',
+        method: 'ALL',
+        path: `/api/projects/${projectSlug}/proxy/*`,
+        alias: `/api/gateway/${projectSlug}/proxy/*`,
+        description: 'Mask upstream third-party media APIs and strip provider server identities.',
+      },
+    ],
+  });
+};
+
+// Mount API Catalog at root and slug levels
+gatewayRoutes.get('/api', getProjectApiCatalog);
+gatewayRoutes.get('/:slug/api', getProjectApiCatalog);
 
 /**
  * GET /api/gateway/:slug/config
@@ -81,6 +177,7 @@ gatewayRoutes.get('/:slug/config', async (c) => {
  */
 gatewayRoutes.post('/:slug/handshake', async (c) => {
   const slug = c.req.param('slug').toLowerCase();
+  const origin = new URL(c.req.url).origin;
   const body = await c.req.json<{ token?: string }>().catch(() => null);
   const token =
     c.req.header('X-OneVault-Token') ||
@@ -88,7 +185,23 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
     body?.token;
 
   if (!token) {
-    throw new HttpError(401, 'Missing OneVault Project Token (X-OneVault-Token header required)');
+    return c.json(
+      {
+        ok: false,
+        status: 401,
+        error: 'Unauthorized: Project Gateway Token Required',
+        message: `Project [${slug}] requires a valid OneVault Project Gateway Token. Please include the 'X-OneVault-Token' header in your request.`,
+        setupGuide: {
+          step1: `Log in to your OneVault Dashboard at ${origin}`,
+          step2: `Navigate to Connected Projects and select '${slug}'`,
+          step3: `Copy your Project Gateway Token (e.g. ov_live_...)`,
+          step4: `Set VITE_ONEVAULT_TOKEN=ov_live_... in your client's .env file`,
+          headerExample: 'X-OneVault-Token: ov_live_your_token_here',
+          apiGuide: `${origin}/api`,
+        },
+      },
+      401
+    );
   }
 
   const clientIp =
@@ -112,7 +225,20 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
         projectName = row.name;
         // Verify token matches if configured
         if (row.gateway_token && row.gateway_token !== token) {
-          throw new HttpError(403, 'Invalid OneVault Project Token for this project');
+          return c.json(
+            {
+              ok: false,
+              status: 401,
+              error: 'Unauthorized: Invalid Project Gateway Token',
+              message: `The provided Project Gateway Token is invalid for project [${slug}]. Please verify the token against your OneVault dashboard.`,
+              setupGuide: {
+                step1: `Verify your token at ${origin}/dashboard`,
+                headerExample: 'X-OneVault-Token: ov_live_your_token_here',
+                apiGuide: `${origin}/api`,
+              },
+            },
+            401
+          );
         }
 
         projectFound = true;
@@ -130,7 +256,19 @@ gatewayRoutes.post('/:slug/handshake', async (c) => {
   }
 
   if (!projectFound) {
-    throw new HttpError(404, `Project [${slug}] not found in OneVault`);
+    return c.json(
+      {
+        ok: false,
+        status: 404,
+        error: `Project [${slug}] Not Found`,
+        message: `No connected project named '${slug}' was found in OneVault. Please add this project in the OneVault dashboard first.`,
+        setupGuide: {
+          dashboardUrl: `${origin}/dashboard`,
+          apiGuide: `${origin}/api`,
+        },
+      },
+      404
+    );
   }
 
   // Log successful handshake to D1 system_audit_logs
@@ -308,16 +446,24 @@ const handleProjectTelemetry = async (c: Context<AppBindings>) => {
     const eventId = `telem_${crypto.randomUUID()}`;
     const watchMins = Number(body.watchMinutes) || 0;
     const mediaIdStr = body.movieId !== undefined ? String(body.movieId) : null;
-    const detailsJson = JSON.stringify(body.details || {});
+    const sessionId =
+      body.sessionId ||
+      (typeof body.details?.sessionId === 'string' ? body.details.sessionId : null) ||
+      (typeof body.details?.session_id === 'string' ? body.details.session_id : null) ||
+      null;
+
+    const detailsObj = { ...(body.details || {}), sessionId: sessionId || undefined };
+    const detailsJson = JSON.stringify(detailsObj);
 
     c.executionCtx.waitUntil(
       (async () => {
         try {
-          // Auto-ensure telemetry table exists
+          // Auto-ensure telemetry table exists with session_id support
           await c.env.DB.prepare(
             `CREATE TABLE IF NOT EXISTS project_telemetry_events (
               id                  TEXT PRIMARY KEY,
               project_slug        TEXT NOT NULL,
+              session_id          TEXT,
               event_type          TEXT NOT NULL,
               title               TEXT,
               path                TEXT,
@@ -337,34 +483,71 @@ const handleProjectTelemetry = async (c: Context<AppBindings>) => {
             )`
           ).run();
 
+          // Safe non-blocking column add for existing deployments
+          await c.env.DB.prepare('ALTER TABLE project_telemetry_events ADD COLUMN session_id TEXT')
+            .run()
+            .catch(() => {});
+
           // Insert telemetry record
-          await c.env.DB.prepare(
-            `INSERT INTO project_telemetry_events (
-              id, project_slug, event_type, title, path, category, media_id, season, episode,
-              watch_minutes, device_type, client_ip, country, city, asn_org, user_agent, details, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-            .bind(
-              eventId,
-              slug,
-              body.event,
-              body.title || null,
-              body.path || null,
-              body.category || null,
-              mediaIdStr,
-              body.season || null,
-              body.episode || null,
-              watchMins,
-              deviceType,
-              clientIp,
-              country,
-              city,
-              asnOrg,
-              userAgent,
-              detailsJson,
-              now
+          try {
+            await c.env.DB.prepare(
+              `INSERT INTO project_telemetry_events (
+                id, project_slug, session_id, event_type, title, path, category, media_id, season, episode,
+                watch_minutes, device_type, client_ip, country, city, asn_org, user_agent, details, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
-            .run();
+              .bind(
+                eventId,
+                slug,
+                sessionId,
+                body.event,
+                body.title || null,
+                body.path || null,
+                body.category || null,
+                mediaIdStr,
+                body.season || null,
+                body.episode || null,
+                watchMins,
+                deviceType,
+                clientIp,
+                country,
+                city,
+                asnOrg,
+                userAgent,
+                detailsJson,
+                now
+              )
+              .run();
+          } catch {
+            // Fallback for pre-migration table
+            await c.env.DB.prepare(
+              `INSERT INTO project_telemetry_events (
+                id, project_slug, event_type, title, path, category, media_id, season, episode,
+                watch_minutes, device_type, client_ip, country, city, asn_org, user_agent, details, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+            )
+              .bind(
+                eventId,
+                slug,
+                body.event,
+                body.title || null,
+                body.path || null,
+                body.category || null,
+                mediaIdStr,
+                body.season || null,
+                body.episode || null,
+                watchMins,
+                deviceType,
+                clientIp,
+                country,
+                city,
+                asnOrg,
+                userAgent,
+                detailsJson,
+                now
+              )
+              .run();
+          }
 
           // Update Project's Live Stats in connected_projects
           const projectRow = await c.env.DB.prepare(
@@ -600,8 +783,10 @@ gatewayRoutes.all('/:slug/proxy/*', async (c) => {
 
   // 4. Construct upstream target URL
   const url = new URL(c.req.url);
-  const proxyPrefix = `/api/gateway/${slug}/proxy`;
-  const subpath = url.pathname.slice(url.pathname.indexOf(proxyPrefix) + proxyPrefix.length);
+  const matchedPrefix = url.pathname.includes('/api/projects/')
+    ? `/api/projects/${slug}/proxy`
+    : `/api/gateway/${slug}/proxy`;
+  const subpath = url.pathname.slice(url.pathname.indexOf(matchedPrefix) + matchedPrefix.length);
   const targetUrl = `${upstreamApi.replace(/\/+$/, '')}${subpath}${url.search}`;
 
   // 5. Proxy the request to concealed upstream

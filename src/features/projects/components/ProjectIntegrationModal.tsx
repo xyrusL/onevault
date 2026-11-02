@@ -92,38 +92,50 @@ export const ProjectIntegrationModal: React.FC<ProjectIntegrationModalProps> = (
     switch (selectedFormat) {
       case 'universal':
         return `# OneVault Universal Edge Shield for ${project.name}
-# Standard environment variables (Node.js, Docker, backend, generic)
-ONEVAULT_GATEWAY_URL=${gatewayUrl}
-ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
-ONEVAULT_MODE=vault`;
+# Standard configuration: user only needs Base URL + Project identifier
+ONEVAULT_BASE_URL=${baseDomainUrl}
+ONEVAULT_PROJECT=${project.slug}
+ONEVAULT_TOKEN=${project.gatewayToken}
+ONEVAULT_MODE=vault
+
+# Legacy Full Endpoint Format (Also fully supported)
+ONEVAULT_GATEWAY_URL=${gatewayUrl}`;
 
       case 'vite':
         return `# OneVault Edge Shield for ${project.name} (Vite / React / Vue)
-VITE_ONEVAULT_GATEWAY_URL=${gatewayUrl}
-VITE_ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
-VITE_ONEVAULT_MODE=vault`;
+VITE_ONEVAULT_BASE_URL=${baseDomainUrl}
+VITE_ONEVAULT_PROJECT=${project.slug}
+VITE_ONEVAULT_TOKEN=${project.gatewayToken}
+VITE_ONEVAULT_MODE=vault
+
+# Legacy Full Endpoint Format
+VITE_ONEVAULT_GATEWAY_URL=${gatewayUrl}`;
 
       case 'nextjs':
         return `# OneVault Edge Shield for ${project.name} (Next.js App & Pages Router)
-NEXT_PUBLIC_ONEVAULT_GATEWAY_URL=${gatewayUrl}
-NEXT_PUBLIC_ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
+NEXT_PUBLIC_ONEVAULT_BASE_URL=${baseDomainUrl}
+NEXT_PUBLIC_ONEVAULT_PROJECT=${project.slug}
+NEXT_PUBLIC_ONEVAULT_TOKEN=${project.gatewayToken}
 NEXT_PUBLIC_ONEVAULT_MODE=vault`;
 
       case 'all':
         return `# OneVault Universal Edge Shield for ${project.name}
 # Standard Universal
-ONEVAULT_GATEWAY_URL=${gatewayUrl}
-ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
+ONEVAULT_BASE_URL=${baseDomainUrl}
+ONEVAULT_PROJECT=${project.slug}
+ONEVAULT_TOKEN=${project.gatewayToken}
 ONEVAULT_MODE=vault
 
 # Vite Framework Alias
-VITE_ONEVAULT_GATEWAY_URL=${gatewayUrl}
-VITE_ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
+VITE_ONEVAULT_BASE_URL=${baseDomainUrl}
+VITE_ONEVAULT_PROJECT=${project.slug}
+VITE_ONEVAULT_TOKEN=${project.gatewayToken}
 VITE_ONEVAULT_MODE=vault
 
 # Next.js Framework Alias
-NEXT_PUBLIC_ONEVAULT_GATEWAY_URL=${gatewayUrl}
-NEXT_PUBLIC_ONEVAULT_GATEWAY_TOKEN=${project.gatewayToken}
+NEXT_PUBLIC_ONEVAULT_BASE_URL=${baseDomainUrl}
+NEXT_PUBLIC_ONEVAULT_PROJECT=${project.slug}
+NEXT_PUBLIC_ONEVAULT_TOKEN=${project.gatewayToken}
 NEXT_PUBLIC_ONEVAULT_MODE=vault`;
     }
   };
@@ -346,15 +358,35 @@ NEXT_PUBLIC_ONEVAULT_MODE=vault`;
           </pre>
         </div>
 
-        {/* Benefits list */}
-        <div className="p-3 rounded-xl bg-surface/50 border border-default text-[11px] text-fg-muted space-y-1">
-          <p className="font-bold text-fg-primary flex items-center gap-1.5">
-            <ShieldCheck size={14} className="text-emerald-400" />
-            <span>Automatic Plug-In Activation</span>
-          </p>
-          <p className="leading-relaxed">
-            Standard <code className="text-fg-secondary">ONEVAULT_*</code> variables work with Node.js, Docker, Vite, Next.js, and edge workers. Once saved in your project's <code className="text-fg-secondary">.env</code>, your site sends an authenticated handshake token on boot.
-          </p>
+        {/* Benefits list & API Endpoints Reference */}
+        <div className="p-3 rounded-xl bg-surface/50 border border-default text-[11px] text-fg-muted space-y-2">
+          <div className="space-y-1">
+            <p className="font-bold text-fg-primary flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-emerald-400" />
+              <span>Automatic Plug-In Activation</span>
+            </p>
+            <p className="leading-relaxed">
+              Standard <code className="text-fg-secondary">ONEVAULT_*</code> variables work with Node.js, Docker, Vite, Next.js, and edge workers. Once saved in your project's <code className="text-fg-secondary">.env</code>, your site sends an authenticated handshake token on boot.
+            </p>
+          </div>
+
+          <div className="pt-2 border-t border-default/50 space-y-1">
+            <span className="font-semibold text-fg-secondary text-[10.5px]">Standard OneVault API Endpoints:</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-mono text-[10px]">
+              <div className="p-1.5 rounded bg-surface border border-default/60">
+                <span className="text-sky-400 font-bold">POST</span> /api/projects/{project.slug}/events
+              </div>
+              <div className="p-1.5 rounded bg-surface border border-default/60">
+                <span className="text-emerald-400 font-bold">POST</span> /api/projects/{project.slug}/handshake
+              </div>
+              <div className="p-1.5 rounded bg-surface border border-default/60">
+                <span className="text-purple-400 font-bold">GET</span> /api/projects/{project.slug}/config
+              </div>
+              <div className="p-1.5 rounded bg-surface border border-default/60">
+                <span className="text-amber-400 font-bold">GET</span> /api/projects/api
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end pt-2 border-t border-default">
