@@ -21,8 +21,33 @@ import type {
   CreateProjectPayload,
   UpdateProjectPayload,
 } from './types/projects.types';
+import { ProjectInsightsView } from './ProjectInsightsView';
 
-export const ProjectsView: React.FC = () => {
+export interface ProjectsViewProps {
+  projectSlug?: string;
+  onNavigatePath?: (path: string) => void;
+}
+
+export const ProjectsView: React.FC<ProjectsViewProps> = ({
+  projectSlug,
+  onNavigatePath,
+}) => {
+  if (projectSlug) {
+    return (
+      <ProjectInsightsView
+        slug={projectSlug}
+        onBack={() => {
+          if (onNavigatePath) {
+            onNavigatePath('/projects');
+          } else {
+            window.history.pushState(null, '', '/projects');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          }
+        }}
+      />
+    );
+  }
+
   const [projects, setProjects] = useState<ProjectItem[]>(() =>
     projectsService.getCachedProjects()
   );
@@ -375,7 +400,14 @@ export const ProjectsView: React.FC = () => {
                   }}
                   onIntegrate={(p) => setIntegratingProject(p)}
                   onRequestDelete={(p) => setDeleteCandidate(p)}
-                  onViewTelemetry={(p) => setTelemetryProject(p)}
+                  onViewTelemetry={(p) => {
+                    if (onNavigatePath) {
+                      onNavigatePath(`/projects/${p.slug}`);
+                    } else {
+                      window.history.pushState(null, '', `/projects/${p.slug}`);
+                      window.dispatchEvent(new PopStateEvent('popstate'));
+                    }
+                  }}
                 />
               ))}
             </div>

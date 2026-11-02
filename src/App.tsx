@@ -88,9 +88,28 @@ export const App: React.FC = () => {
     setCurrentPath('/');
   };
 
+  const handleNavigatePath = (nextPath: string) => {
+    window.history.pushState(null, '', nextPath);
+    setCurrentPath(nextPath.toLowerCase().replace(/\/+$/, '') || '/');
+  };
+
+  // Support /projects/:slug deep-linking for dedicated project insights
+  const pathSegments = currentPath.split('/').filter(Boolean);
+  const isProjectPath =
+    (pathSegments[0] === 'projects' || pathSegments[0] === 'project') &&
+    pathSegments.length <= 2;
+  const projectSlug = isProjectPath && pathSegments.length === 2 ? pathSegments[1] : undefined;
+
+  let activeSection: PortalSectionId = 'dashboard';
+  if (isProjectPath) {
+    activeSection = 'projects';
+  } else if (SECTION_MAP[currentPath]) {
+    activeSection = SECTION_MAP[currentPath];
+  }
+
   // Check if current path is an invalid, hidden, or unmapped URL
   const isNotFound =
-    !KNOWN_PATHS.has(currentPath) ||
+    (!KNOWN_PATHS.has(currentPath) && !isProjectPath) ||
     currentPath.includes('..') ||
     /(?:^|\/)\.[^/]/.test(currentPath);
 
@@ -102,8 +121,10 @@ export const App: React.FC = () => {
         <AdminPortalRouter
           userEmail={session.email}
           onSignOut={handleSignOut}
-          activeSection={SECTION_MAP[currentPath] || 'dashboard'}
+          activeSection={activeSection}
           onSelectSection={handleSelectSection}
+          projectSlug={projectSlug}
+          onNavigatePath={handleNavigatePath}
         />
       ) : (
         <SignInPage onSignInSuccess={handleSignInSuccess} />

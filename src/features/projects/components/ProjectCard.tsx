@@ -19,6 +19,7 @@ export interface ProjectCardProps {
   onEdit: (project: ProjectItem) => void;
   onViewIntegration: (project: ProjectItem) => void;
   onDelete: (id: string) => void;
+  onViewTelemetry?: (project: ProjectItem) => void;
 }
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({
@@ -27,6 +28,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onEdit,
   onViewIntegration,
   onDelete,
+  onViewTelemetry,
 }) => {
   const isPluggedIn = project.status === 'active';
   const isGigaMaxx = project.slug === 'gigamaxx';
@@ -79,7 +81,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
       </div>
 
       {/* Live Telemetry Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-default text-xs">
+      <div
+        onClick={() => onViewTelemetry?.(project)}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-default text-xs cursor-pointer hover:opacity-85 transition-opacity"
+        title="View dedicated live telemetry & insights page"
+      >
         <div className="p-2.5 rounded-xl bg-surface-muted/50 border border-default">
           <div className="flex items-center gap-1 text-[11px] text-fg-muted">
             <Users size={12} className="text-emerald-400" />

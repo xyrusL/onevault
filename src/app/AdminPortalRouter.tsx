@@ -16,6 +16,8 @@ interface AdminPortalRouterProps {
   onSignOut: () => void;
   activeSection?: PortalSectionId;
   onSelectSection?: (section: PortalSectionId) => void;
+  projectSlug?: string;
+  onNavigatePath?: (path: string) => void;
 }
 
 export const AdminPortalRouter: React.FC<AdminPortalRouterProps> = ({
@@ -23,6 +25,8 @@ export const AdminPortalRouter: React.FC<AdminPortalRouterProps> = ({
   onSignOut,
   activeSection: controlledSection,
   onSelectSection: controlledOnSelect,
+  projectSlug,
+  onNavigatePath,
 }) => {
   const [internalSection, setInternalSection] =
     useState<PortalSectionId>('dashboard');
@@ -41,7 +45,12 @@ export const AdminPortalRouter: React.FC<AdminPortalRouterProps> = ({
       case 'dashboard':
         return <DashboardView onNavigate={handleSelectSection} />;
       case 'projects':
-        return <ProjectsView />;
+        return (
+          <ProjectsView
+            projectSlug={projectSlug}
+            onNavigatePath={onNavigatePath}
+          />
+        );
       case 'mail':
         return <MailView />;
       case 'domains':
