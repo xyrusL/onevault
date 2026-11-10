@@ -17,6 +17,7 @@ import {
   MailDomain,
   NO_FORWARD,
 } from '../types/mail.types';
+import { SubdomainIcon } from './SubdomainIcon';
 
 interface CreateMailModalContentProps {
   domains: MailDomain[];
@@ -34,33 +35,82 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
   onCancel,
   onCreate,
 }) => {
+  // Ensure initialDomain is part of the domains list so it is never missing
+  const effectiveDomains = useMemo(() => {
+    const list = [...domains];
+    if (
+      initialDomain &&
+      !list.some((d) => d.name.toLowerCase() === initialDomain.toLowerCase())
+    ) {
+      list.push({
+        id: initialDomain.toLowerCase(),
+        name: initialDomain.toLowerCase(),
+        status: 'active',
+      });
+    }
+    return list;
+  }, [domains, initialDomain]);
+
   const rootDomains = useMemo(
     () =>
-      domains.filter(
-        (d) => !domains.some((other) => other.name !== d.name && d.name.endsWith(`.${other.name}`))
+      effectiveDomains.filter(
+        (d) =>
+          !effectiveDomains.some(
+            (other) =>
+              other.name.toLowerCase() !== d.name.toLowerCase() &&
+              d.name.toLowerCase().endsWith(`.${other.name.toLowerCase()}`)
+          )
       ),
-    [domains]
+    [effectiveDomains]
   );
 
+  const initialInfo = useMemo(() => {
+    if (!initialDomain) {
+      return {
+        rootDomain: rootDomains[0]?.name ?? '',
+        subdomain: NO_FORWARD,
+        isSubdomain: false,
+        subdomainPrefix: '',
+      };
+    }
+    const normalized = initialDomain.trim().toLowerCase();
+    const exactRoot = rootDomains.find(
+      (rd) => rd.name.toLowerCase() === normalized
+    );
+    if (exactRoot) {
+      return {
+        rootDomain: exactRoot.name,
+        subdomain: NO_FORWARD,
+        isSubdomain: false,
+        subdomainPrefix: '',
+      };
+    }
+    const parentRoot = rootDomains.find(
+      (rd) =>
+        normalized !== rd.name.toLowerCase() &&
+        normalized.endsWith(`.${rd.name.toLowerCase()}`)
+    );
+    if (parentRoot) {
+      const prefix = normalized.slice(0, -(parentRoot.name.length + 1));
+      return {
+        rootDomain: parentRoot.name,
+        subdomain: normalized,
+        isSubdomain: true,
+        subdomainPrefix: prefix,
+      };
+    }
+    return {
+      rootDomain: rootDomains[0]?.name ?? '',
+      subdomain: NO_FORWARD,
+      isSubdomain: false,
+      subdomainPrefix: '',
+    };
+  }, [initialDomain, rootDomains]);
+
   const [localPart, setLocalPart] = useState('');
-  const [rootDomain, setRootDomain] = useState(() => {
-    if (initialDomain) {
-      const match = rootDomains.find(
-        (rd) => initialDomain === rd.name || initialDomain.endsWith(`.${rd.name}`)
-      );
-      if (match) return match.name;
-    }
-    return rootDomains[0]?.name ?? '';
-  });
-
+  const [rootDomain, setRootDomain] = useState(() => initialInfo.rootDomain);
   const [isLockedDomain, setIsLockedDomain] = useState(() => Boolean(initialDomain));
-
-  const [subdomain, setSubdomain] = useState(() => {
-    if (initialDomain && !rootDomains.some((rd) => rd.name === initialDomain)) {
-      return initialDomain;
-    }
-    return NO_FORWARD;
-  });
+  const [subdomain, setSubdomain] = useState(() => initialInfo.subdomain);
 
   const [forwardTo, setForwardTo] = useState(NO_FORWARD);
   const [note, setNote] = useState('');
@@ -70,22 +120,34 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
 
   const activeRootDomain = rootDomain || rootDomains[0]?.name || '';
 
-  const subdomainsForRoot = useMemo(
-    () =>
-      domains.filter(
-        (d) =>
-          activeRootDomain &&
-          d.name !== activeRootDomain &&
-          d.name.endsWith(`.${activeRootDomain}`)
-      ),
-    [domains, activeRootDomain]
-  );
+  const subdomainsForRoot = useMemo(() => {
+    const subs = effectiveDomains.filter(
+      (d) =>
+        activeRootDomain &&
+        d.name.toLowerCase() !== activeRootDomain.toLowerCase() &&
+        d.name.toLowerCase().endsWith(`.${activeRootDomain.toLowerCase()}`)
+    );
+    if (
+      initialInfo.isSubdomain &&
+      initialInfo.rootDomain.toLowerCase() === activeRootDomain.toLowerCase() &&
+      !subs.some((s) => s.name.toLowerCase() === initialInfo.subdomain.toLowerCase())
+    ) {
+      subs.push({
+        id: initialInfo.subdomain,
+        name: initialInfo.subdomain,
+        status: 'active',
+      });
+    }
+    return subs;
+  }, [effectiveDomains, activeRootDomain, initialInfo]);
 
   const rootDomainOptions = useMemo<SelectOption[]>(
     () =>
       rootDomains.map((d) => {
-        const subCount = domains.filter(
-          (item) => item.name !== d.name && item.name.endsWith(`.${d.name}`)
+        const subCount = effectiveDomains.filter(
+          (item) =>
+            item.name.toLowerCase() !== d.name.toLowerCase() &&
+            item.name.toLowerCase().endsWith(`.${d.name.toLowerCase()}`)
         ).length;
         return {
           value: d.name,
@@ -93,7 +155,7 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
           badge: subCount > 0 ? `${subCount} sub` : undefined,
         };
       }),
-    [rootDomains, domains]
+    [rootDomains, effectiveDomains]
   );
 
   const subdomainOptions = useMemo<SelectOption[]>(
@@ -119,11 +181,18 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
     [forwardTargets]
   );
 
-  const effectiveDomain =
-    subdomain !== NO_FORWARD &&
-    subdomainsForRoot.some((s) => s.name === subdomain)
-      ? subdomain
-      : activeRootDomain;
+  const effectiveDomain = useMemo(() => {
+    if (subdomain !== NO_FORWARD) {
+      const match = subdomainsForRoot.find(
+        (s) => s.name.toLowerCase() === subdomain.toLowerCase()
+      );
+      if (match) return match.name;
+      if (subdomain.toLowerCase().endsWith(`.${activeRootDomain.toLowerCase()}`)) {
+        return subdomain;
+      }
+    }
+    return activeRootDomain;
+  }, [subdomain, subdomainsForRoot, activeRootDomain]);
 
   const sanitizedName = localPart.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
 
@@ -243,17 +312,32 @@ export const CreateMailModalContent: React.FC<CreateMailModalContentProps> = ({
             <div className="flex items-center justify-between text-xs font-medium text-fg-secondary">
               <span>Subdomain</span>
               <span className="text-fg-muted font-normal">
-                {subdomainsForRoot.length > 0
-                  ? `${subdomainsForRoot.length} available`
-                  : 'Root only'}
+                {isLockedDomain && initialInfo.isSubdomain
+                  ? 'Locked to folder'
+                  : subdomainsForRoot.length > 0
+                    ? `${subdomainsForRoot.length} available`
+                    : 'Root only'}
               </span>
             </div>
-            <CustomSelect
-              value={subdomain}
-              options={subdomainOptions}
-              onChange={setSubdomain}
-              icon={<At size={14} weight="duotone" />}
-            />
+            {isLockedDomain && initialInfo.isSubdomain ? (
+              <div className="flex items-center justify-between rounded-lg bg-elevated/70 border border-default px-3 py-2 text-sm text-fg-primary font-mono select-none">
+                <div className="flex items-center gap-2 truncate">
+                  <SubdomainIcon name={initialInfo.subdomainPrefix} size={14} className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{initialInfo.subdomainPrefix}.{activeRootDomain}</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-fg-muted tracking-wider px-2 py-0.5 rounded bg-surface border border-subtle shrink-0">
+                  <LockSimple size={10} weight="bold" className="text-accent" />
+                  Locked
+                </span>
+              </div>
+            ) : (
+              <CustomSelect
+                value={subdomain}
+                options={subdomainOptions}
+                onChange={setSubdomain}
+                icon={<At size={14} weight="duotone" />}
+              />
+            )}
           </div>
         </div>
       )}

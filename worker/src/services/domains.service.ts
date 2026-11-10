@@ -813,6 +813,23 @@ export const domainsService = {
       // Ignore
     }
 
+    try {
+      const { results: accRows } = await env.DB.prepare(
+        'SELECT DISTINCT domain, zone_id FROM mail_accounts'
+      ).all<{ domain: string; zone_id?: string }>();
+      for (const row of accRows || []) {
+        const domain = (row.domain || '').trim().toLowerCase();
+        const zone = zones.find(
+          (z) => (row.zone_id && z.id === row.zone_id) || (domain !== z.name && domain.endsWith(`.${z.name}`))
+        );
+        if (zone && domain !== zone.name && domain.endsWith(`.${zone.name}`)) {
+          subdomainsByZone.get(zone.id)?.add(domain);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
     const output: DomainDto[] = [];
     for (const zone of zones) {
       output.push(zone);

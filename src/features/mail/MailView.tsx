@@ -173,6 +173,24 @@ export const MailView: React.FC = () => {
     return Array.from(set).sort();
   }, [accounts]);
 
+  // Unified list of all root domains and subdomains from Cloudflare + discovered in accounts
+  const allDomains = useMemo<MailDomain[]>(() => {
+    const map = new Map<string, MailDomain>();
+    for (const d of domains) {
+      map.set(d.name.toLowerCase(), d);
+    }
+    for (const a of accounts) {
+      if (a.domain && !map.has(a.domain.toLowerCase())) {
+        map.set(a.domain.toLowerCase(), {
+          id: a.domain.toLowerCase(),
+          name: a.domain.toLowerCase(),
+          status: 'active',
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [domains, accounts]);
+
   // Available service tags across all accounts, prioritized by frequency & user usage (most-used first)
   const availableServices = useMemo(() => {
     const accountCountMap = new Map<string, number>();
@@ -488,7 +506,9 @@ export const MailView: React.FC = () => {
   };
 
   const handleOpenCreateSubdomain = (rootDomain?: string) => {
-    setCreateSubdomainRoot(rootDomain ?? '');
+    const effectiveRoot =
+      rootDomain || (activeFolder ? activeFolder.rootDomain : undefined);
+    setCreateSubdomainRoot(effectiveRoot ?? '');
     setIsCreateSubdomainModalOpen(true);
   };
 
@@ -649,7 +669,7 @@ export const MailView: React.FC = () => {
       ) : viewMode === 'folders' ? (
         <MailFolderGridView
           accounts={sortedAccounts}
-          domains={domains}
+          domains={allDomains}
           onOpenFolder={(folder) => setActiveFolder(folder)}
           onCreateMailInFolder={(folder) => handleOpenCreateMail(folder.fullDomain)}
           onOpenCreateSubdomain={handleOpenCreateSubdomain}
@@ -698,7 +718,7 @@ export const MailView: React.FC = () => {
         icon={<Plus size={15} weight="bold" />}
       >
         <CreateMailModalContent
-          domains={domains}
+          domains={allDomains}
           forwardTargets={forwardTargets}
           initialDomain={createMailInitialDomain}
           onCancel={() => {
@@ -722,7 +742,7 @@ export const MailView: React.FC = () => {
         icon={<FolderPlus size={15} weight="duotone" className="text-accent" />}
       >
         <CreateSubdomainModalContent
-          domains={domains}
+          domains={allDomains}
           initialRootDomain={createSubdomainRoot}
           onCancel={() => setIsCreateSubdomainModalOpen(false)}
           onCreate={handleCreateSubdomain}

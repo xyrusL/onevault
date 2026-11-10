@@ -29,21 +29,36 @@ export const CreateSubdomainModalContent: React.FC<CreateSubdomainModalContentPr
       domains.filter(
         (d) =>
           !domains.some(
-            (other) => other.name !== d.name && d.name.endsWith(`.${other.name}`)
+            (other) =>
+              other.name.toLowerCase() !== d.name.toLowerCase() &&
+              d.name.toLowerCase().endsWith(`.${other.name.toLowerCase()}`)
           )
       ),
     [domains]
   );
 
-  const [rootDomain, setRootDomain] = useState(() => {
-    if (initialRootDomain && rootDomains.some((d) => d.name === initialRootDomain)) {
-      return initialRootDomain;
-    }
-    return rootDomains[0]?.name ?? '';
-  });
+  const matchedRoot = useMemo(() => {
+    if (!initialRootDomain) return rootDomains[0]?.name ?? '';
+    const normalized = initialRootDomain.trim().toLowerCase();
+    const match = rootDomains.find(
+      (d) =>
+        d.name.toLowerCase() === normalized ||
+        normalized.endsWith(`.${d.name.toLowerCase()}`)
+    );
+    return match?.name ?? rootDomains[0]?.name ?? '';
+  }, [initialRootDomain, rootDomains]);
+
+  const [rootDomain, setRootDomain] = useState(() => matchedRoot);
 
   const [isLocked, setIsLocked] = useState(() =>
-    Boolean(initialRootDomain && rootDomains.some((d) => d.name === initialRootDomain))
+    Boolean(
+      initialRootDomain &&
+        rootDomains.some(
+          (d) =>
+            d.name.toLowerCase() === initialRootDomain.trim().toLowerCase() ||
+            initialRootDomain.trim().toLowerCase().endsWith(`.${d.name.toLowerCase()}`)
+        )
+    )
   );
 
   const [subdomainPrefix, setSubdomainPrefix] = useState('');
