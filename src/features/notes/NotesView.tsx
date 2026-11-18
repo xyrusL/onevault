@@ -21,7 +21,7 @@ import { NoteNewFolderCard } from './components/NoteNewFolderCard';
 import { NotesHeader } from './components/NotesHeader';
 import { NoteTimeFilterTabs } from './components/NoteTimeFilterTabs';
 import { NoteFullViewModal } from './components/full-view/NoteFullViewModal';
-import { notesService } from './services/notes.service';
+import { notesService, sanitizeFolderId } from './services/notes.service';
 import {
   CreateFolderPayload,
   CreateNotePayload,
@@ -149,6 +149,11 @@ export const NotesView: React.FC = () => {
     });
   }, [notes, selectedFolderFilterId, notesTimeFilter, searchQuery]);
 
+  const effectiveInitialFolderId = useMemo(
+    () => sanitizeFolderId(selectedFolderFilterId),
+    [selectedFolderFilterId]
+  );
+
   const activeFilteredFolder = useMemo(() => {
     if (selectedFolderFilterId === '__none__') {
       return noneFolderInfo;
@@ -188,7 +193,7 @@ export const NotesView: React.FC = () => {
       id: editingNote?.id ?? '',
       title: draft.title,
       content: draft.content,
-      folderId: draft.folderId || null,
+      folderId: sanitizeFolderId(draft.folderId),
       color: draft.color,
       isPinned: draft.isPinned,
       isArchived: editingNote?.isArchived ?? false,
@@ -215,7 +220,7 @@ export const NotesView: React.FC = () => {
       setEditingNote({
         ...fullViewNote,
         ...draft,
-        folderId: draft.folderId || null,
+        folderId: sanitizeFolderId(draft.folderId),
       });
     } else {
       setIsCreateNoteModalOpen(true);
@@ -485,7 +490,7 @@ export const NotesView: React.FC = () => {
       >
         <NoteEditorModalContent
           folders={folders}
-          initialFolderId={selectedFolderFilterId}
+          initialFolderId={effectiveInitialFolderId}
           onCancel={() => setIsCreateNoteModalOpen(false)}
           onSave={handleSaveNote}
           onOpenFullView={handleOpenFullViewWithDraft}
@@ -586,7 +591,7 @@ export const NotesView: React.FC = () => {
         isOpen={isFullViewOpen}
         note={fullViewNote}
         folders={folders}
-        initialFolderId={selectedFolderFilterId}
+        initialFolderId={effectiveInitialFolderId}
         onClose={() => {
           setIsFullViewOpen(false);
           setFullViewNote(null);

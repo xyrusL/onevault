@@ -25,6 +25,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { CustomSelect, SelectOption } from '../../../shared/components/forms/CustomSelect';
+import { normalizeFolderId } from '../services/notes.service';
 import { CreateNotePayload, Note, NoteColor, NoteFolder, UpdateNotePayload } from '../types/notes.types';
 import { NOTE_COLOR_THEMES } from '../utils/note-colors.utils';
 import {
@@ -60,8 +61,8 @@ export const NoteEditorModalContent: React.FC<NoteEditorModalContentProps> = ({
   onOpenFullView,
 }) => {
   const [title, setTitle] = useState(note?.title ?? '');
-  const [folderId, setFolderId] = useState<string>(
-    note?.folderId ?? initialFolderId ?? ''
+  const [folderId, setFolderId] = useState<string>(() =>
+    normalizeFolderId(note?.folderId ?? initialFolderId, folders)
   );
   const [color, setColor] = useState<NoteColor>(note?.color ?? 'default');
   const [isPinned, setIsPinned] = useState(note?.isPinned ?? false);
@@ -153,10 +154,11 @@ export const NoteEditorModalContent: React.FC<NoteEditorModalContentProps> = ({
     setError(null);
 
     try {
+      const normalizedFolderId = normalizeFolderId(folderId, folders);
       await onSave({
         title: title.trim(),
         content: htmlContent,
-        folderId: folderId || null,
+        folderId: normalizedFolderId || null,
         color,
         isPinned,
         tags,
@@ -172,7 +174,7 @@ export const NoteEditorModalContent: React.FC<NoteEditorModalContentProps> = ({
       onOpenFullView({
         title,
         content: editor ? editor.getHTML() : note?.content ?? '',
-        folderId,
+        folderId: normalizeFolderId(folderId, folders),
         color,
         isPinned,
         tags,

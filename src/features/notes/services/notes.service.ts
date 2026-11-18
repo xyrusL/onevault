@@ -11,6 +11,33 @@ import type {
 const NOTES_CACHE_KEY = 'onevault.notes.cache.v2';
 const FOLDERS_CACHE_KEY = 'onevault.note-folders.cache.v2';
 
+/**
+ * Converts empty strings or the virtual `'__none__'` filter sentinel into `null`.
+ */
+export function sanitizeFolderId(folderId?: string | null): string | null {
+  if (typeof folderId !== 'string') return null;
+  const trimmed = folderId.trim();
+  const lower = trimmed.toLowerCase();
+  if (!trimmed || lower === '__none__' || lower === 'none') {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
+ * Resolves a folder ID to a valid ID in `availableFolders`, or `''` for unfiled notes.
+ */
+export function normalizeFolderId(
+  rawId: string | null | undefined,
+  availableFolders: NoteFolder[]
+): string {
+  const sanitized = sanitizeFolderId(rawId);
+  if (!sanitized || !availableFolders.some((f) => f.id === sanitized)) {
+    return '';
+  }
+  return sanitized;
+}
+
 interface NotesCache {
   notes: Note[];
   folders: NoteFolder[];
@@ -138,9 +165,13 @@ export const notesService = {
   },
 
   async createNote(payload: CreateNotePayload): Promise<Note> {
+    const sanitizedPayload: CreateNotePayload = {
+      ...payload,
+      folderId: sanitizeFolderId(payload.folderId),
+    };
     const created = await apiRequest<Note>('/notes', {
       method: 'POST',
-      body: payload,
+      body: sanitizedPayload,
     });
     const current = memoryNotes ?? [];
     persistNotes([created, ...current]);
@@ -158,10 +189,14 @@ export const notesService = {
   },
 
   async updateNote(id: string, payload: UpdateNotePayload): Promise<Note> {
+    const sanitizedPayload: UpdateNotePayload =
+      payload.folderId !== undefined
+        ? { ...payload, folderId: sanitizeFolderId(payload.folderId) }
+        : payload;
     const current = memoryNotes ?? [];
     const existing = current.find((n) => n.id === id);
     const updated: Note = existing
-      ? { ...existing, ...payload, updatedAt: new Date().toISOString() }
+      ? { ...existing, ...sanitizedPayload, updatedAt: new Date().toISOString() }
       : ({} as Note);
 
     if (existing) {
@@ -170,7 +205,7 @@ export const notesService = {
 
     await apiClient.syncPatch<Note>(
       `/notes/${encodeURIComponent(id)}`,
-      payload,
+      sanitizedPayload,
       `note_${id}`,
       updated
     );

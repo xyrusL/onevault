@@ -49,6 +49,48 @@ function toNoteDto(row: NoteRow): NoteDto {
   };
 }
 
+interface ResolvedFolder {
+  folderId: string | null;
+  folderName: string | null;
+  folderColor: string | null;
+}
+
+/**
+ * Validates and resolves a folder ID against D1 `note_folders`.
+ * Maps empty, sentinel (`__none__`, `none`), or missing/stale folder IDs to `null`
+ * to prevent SQLite foreign key constraint failures (`SQLITE_CONSTRAINT_FOREIGNKEY`).
+ */
+async function resolveValidFolder(
+  env: Env,
+  rawFolderId?: string | null
+): Promise<ResolvedFolder> {
+  if (typeof rawFolderId !== 'string') {
+    return { folderId: null, folderName: null, folderColor: null };
+  }
+
+  const trimmed = rawFolderId.trim();
+  const normalized = trimmed.toLowerCase();
+  if (!trimmed || normalized === '__none__' || normalized === 'none') {
+    return { folderId: null, folderName: null, folderColor: null };
+  }
+
+  const folder = await env.DB.prepare(
+    'SELECT id, name, color FROM note_folders WHERE id = ?'
+  )
+    .bind(trimmed)
+    .first<{ id: string; name: string; color: string }>();
+
+  if (!folder) {
+    return { folderId: null, folderName: null, folderColor: null };
+  }
+
+  return {
+    folderId: folder.id,
+    folderName: folder.name,
+    folderColor: folder.color,
+  };
+}
+
 export const notesService = {
   /**
    * Pre-seed logic hook (no-op in production; completely clean database).
@@ -192,35 +234,27 @@ export const notesService = {
   },
 
   async createNote(env: Env, payload: CreateNotePayload): Promise<NoteDto> {
-    const title = payload.title.trim();
+    const title = (payload.title ?? '').trim();
     if (!title) {
       throw new HttpError(400, 'Note title is required.');
     }
 
     const id = `note_${crypto.randomUUID()}`;
     const now = new Date().toISOString();
-    const folderId = payload.folderId || null;
+    const { folderId, folderName, folderColor } = await resolveValidFolder(
+      env,
+      payload.folderId
+    );
     const content = payload.content ?? '';
     const color = payload.color ?? 'default';
     const isPinned = payload.isPinned ? 1 : 0;
-    const tagsJson = JSON.stringify(payload.tags ?? []);
+    const tags = Array.isArray(payload.tags) ? payload.tags : [];
+    const tagsJson = JSON.stringify(tags);
 
     await env.DB.prepare(
       `INSERT INTO notes (id, folder_id, title, content, color, is_pinned, is_archived, tags, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`
     ).bind(id, folderId, title, content, color, isPinned, tagsJson, now, now).run();
-
-    let folderName: string | null = null;
-    let folderColor: string | null = null;
-    if (folderId) {
-      const folder = await env.DB.prepare('SELECT name, color FROM note_folders WHERE id = ?')
-        .bind(folderId)
-        .first<{ name: string; color: string }>();
-      if (folder) {
-        folderName = folder.name;
-        folderColor = folder.color;
-      }
-    }
 
     return {
       id,
@@ -232,7 +266,7 @@ export const notesService = {
       color,
       isPinned: Boolean(isPinned),
       isArchived: false,
-      tags: payload.tags ?? [],
+      tags,
       createdAt: now,
       updatedAt: now,
     };
@@ -251,13 +285,24 @@ export const notesService = {
       throw new HttpError(404, 'Note not found.');
     }
 
-    const title = payload.title !== undefined ? payload.title.trim() : existing.title;
+    const title =
+      typeof payload.title === 'string'
+        ? payload.title.trim() || existing.title
+        : existing.title;
     const content = payload.content !== undefined ? payload.content : existing.content;
-    const folderId = payload.folderId !== undefined ? (payload.folderId || null) : existing.folder_id;
+    const rawFolderId =
+      payload.folderId !== undefined ? payload.folderId : existing.folder_id;
+    const { folderId, folderName, folderColor } = await resolveValidFolder(
+      env,
+      rawFolderId
+    );
     const color = payload.color !== undefined ? payload.color : existing.color;
     const isPinned = payload.isPinned !== undefined ? (payload.isPinned ? 1 : 0) : existing.is_pinned;
     const isArchived = payload.isArchived !== undefined ? (payload.isArchived ? 1 : 0) : existing.is_archived;
-    const tagsJson = payload.tags !== undefined ? JSON.stringify(payload.tags) : existing.tags;
+    const tagsJson =
+      payload.tags !== undefined
+        ? JSON.stringify(Array.isArray(payload.tags) ? payload.tags : [])
+        : existing.tags;
     const now = new Date().toISOString();
 
     await env.DB.prepare(
@@ -265,18 +310,6 @@ export const notesService = {
        SET title = ?, content = ?, folder_id = ?, color = ?, is_pinned = ?, is_archived = ?, tags = ?, updated_at = ?
        WHERE id = ?`
     ).bind(title, content, folderId, color, isPinned, isArchived, tagsJson, now, id).run();
-
-    let folderName: string | null = null;
-    let folderColor: string | null = null;
-    if (folderId) {
-      const folder = await env.DB.prepare('SELECT name, color FROM note_folders WHERE id = ?')
-        .bind(folderId)
-        .first<{ name: string; color: string }>();
-      if (folder) {
-        folderName = folder.name;
-        folderColor = folder.color;
-      }
-    }
 
     return {
       id,

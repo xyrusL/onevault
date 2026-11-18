@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { notesService } from '../services/notes.service';
 import type { AppBindings } from '../types/env.types';
 import type {
@@ -9,6 +9,18 @@ import type {
 } from '../types/notes.types';
 
 export const notesRoutes = new Hono<AppBindings>();
+
+const handleUpdateFolder = async (c: Context<AppBindings>, id: string) => {
+  const payload = await c.req.json<UpdateFolderPayload>();
+  const folder = await notesService.updateFolder(c.env, id, payload);
+  return c.json(folder);
+};
+
+const handleUpdateNote = async (c: Context<AppBindings>, id: string) => {
+  const payload = await c.req.json<UpdateNotePayload>();
+  const note = await notesService.updateNote(c.env, id, payload);
+  return c.json(note);
+};
 
 // Folders
 notesRoutes.get('/folders', async (c) => {
@@ -22,12 +34,8 @@ notesRoutes.post('/folders', async (c) => {
   return c.json(folder, 201);
 });
 
-notesRoutes.patch('/folders/:id', async (c) => {
-  const id = c.req.param('id');
-  const payload = await c.req.json<UpdateFolderPayload>();
-  const folder = await notesService.updateFolder(c.env, id, payload);
-  return c.json(folder);
-});
+notesRoutes.patch('/folders/:id', (c) => handleUpdateFolder(c, c.req.param('id')));
+notesRoutes.put('/folders/:id', (c) => handleUpdateFolder(c, c.req.param('id')));
 
 notesRoutes.delete('/folders/:id', async (c) => {
   const id = c.req.param('id');
@@ -56,12 +64,8 @@ notesRoutes.post('/', async (c) => {
   return c.json(note, 201);
 });
 
-notesRoutes.patch('/:id', async (c) => {
-  const id = c.req.param('id');
-  const payload = await c.req.json<UpdateNotePayload>();
-  const note = await notesService.updateNote(c.env, id, payload);
-  return c.json(note);
-});
+notesRoutes.patch('/:id', (c) => handleUpdateNote(c, c.req.param('id')));
+notesRoutes.put('/:id', (c) => handleUpdateNote(c, c.req.param('id')));
 
 notesRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');

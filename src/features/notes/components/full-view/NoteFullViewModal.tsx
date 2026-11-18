@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -15,6 +15,7 @@ import {
   FloppyDisk,
 } from '@phosphor-icons/react';
 import { BaseModal } from '../../../../shared/components/modals/BaseModal';
+import { normalizeFolderId } from '../../services/notes.service';
 import {
   CreateNotePayload,
   Note,
@@ -63,8 +64,8 @@ export const NoteFullViewModal: React.FC<NoteFullViewModalProps> = ({
   onSave,
 }) => {
   const [title, setTitle] = useState(note?.title ?? '');
-  const [folderId, setFolderId] = useState<string>(
-    note?.folderId ?? initialFolderId ?? ''
+  const [folderId, setFolderId] = useState<string>(() =>
+    normalizeFolderId(note?.folderId ?? initialFolderId, folders)
   );
   const [color, setColor] = useState<NoteColor>(note?.color ?? 'default');
   const [isPinned, setIsPinned] = useState(note?.isPinned ?? false);
@@ -81,11 +82,16 @@ export const NoteFullViewModal: React.FC<NoteFullViewModalProps> = ({
   const [charts, setCharts] = useState<NoteChartConfig[]>([]);
   const [embeds, setEmbeds] = useState<NoteEmbedConfig[]>([]);
 
+  const foldersRef = useRef(folders);
+  foldersRef.current = folders;
+
   // Initialize and synchronize content when modal opens or note changes
   useEffect(() => {
     if (isOpen) {
       setTitle(note?.title ?? '');
-      setFolderId(note?.folderId ?? initialFolderId ?? '');
+      setFolderId(
+        normalizeFolderId(note?.folderId ?? initialFolderId, foldersRef.current)
+      );
       setColor(note?.color ?? 'default');
       setIsPinned(note?.isPinned ?? false);
       setTags(note?.tags ?? []);
@@ -206,7 +212,7 @@ export const NoteFullViewModal: React.FC<NoteFullViewModalProps> = ({
       onExitToStandardModal({
         title: title.trim(),
         content: fullHtml,
-        folderId,
+        folderId: normalizeFolderId(folderId, folders),
         color,
         isPinned,
         tags,
@@ -228,10 +234,11 @@ export const NoteFullViewModal: React.FC<NoteFullViewModalProps> = ({
     setError(null);
 
     try {
+      const normalizedFolderId = normalizeFolderId(folderId, folders);
       await onSave({
         title: title.trim(),
         content: fullHtml,
-        folderId: folderId || null,
+        folderId: normalizedFolderId || null,
         color,
         isPinned,
         tags,
