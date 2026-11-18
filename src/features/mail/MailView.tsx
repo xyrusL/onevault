@@ -24,7 +24,6 @@ import { MailInboxModalContent } from './components/MailInboxModalContent';
 import { MailNotePadModalContent } from './components/MailNotePadModalContent';
 import { MailAccountActivityModalContent } from './components/service-activity';
 import { ServiceBadgeStyleProvider } from './context/ServiceBadgeStyleContext';
-import { apiRequest } from '../../shared/services/api-client.service';
 import { mailInboxService } from './services/mail-inbox.service';
 import { mailService } from './services/mail.service';
 import { MailActivityItem } from './types/mail-inbox.types';
@@ -107,20 +106,7 @@ export const MailView: React.FC = () => {
 
   const [filters, setFilters] = useState<MailFilterState>(() => {
     try {
-      const savedStr = localStorage.getItem('onevault.mail.filters');
-      if (savedStr) {
-        const parsed = JSON.parse(savedStr);
-        return {
-          status: parsed.status || 'all',
-          activity: parsed.activity || 'all',
-          domains: Array.isArray(parsed.domains)
-            ? parsed.domains
-            : (parsed.domain && parsed.domain !== 'all' ? [parsed.domain] : []),
-          services: Array.isArray(parsed.services)
-            ? parsed.services
-            : (parsed.service && parsed.service !== 'all' ? [parsed.service] : []),
-        };
-      }
+      localStorage.removeItem('onevault.mail.filters');
     } catch {}
     return DEFAULT_MAIL_FILTERS;
   });
@@ -133,7 +119,6 @@ export const MailView: React.FC = () => {
       setActiveFolder(null);
     }
     try {
-      localStorage.setItem('onevault.mail.filters', JSON.stringify(newFilters));
       // Track usage count for selected services so most-used services rank first
       if (newFilters.services && newFilters.services.length > 0) {
         const raw = localStorage.getItem('onevault.mail.filter_usage');
@@ -145,9 +130,6 @@ export const MailView: React.FC = () => {
         localStorage.setItem('onevault.mail.filter_usage', JSON.stringify(usage));
       }
     } catch {}
-
-    // Queue filter preferences to cloud automatically via modular sync write in mailService
-    void mailService.savePreferences(newFilters);
   };
 
   const handleSearchChange = (query: string) => {
@@ -393,22 +375,6 @@ export const MailView: React.FC = () => {
             : 'Unable to load mail data.'
         );
       }
-
-      // Restore cloud-saved filter preferences if available
-      void apiRequest<{ preferences: MailFilterState | null }>('/mail/preferences')
-        .then((res) => {
-          if (res?.preferences) {
-            setFilters((current) => {
-              const isDefault =
-                current.status === 'all' &&
-                current.activity === 'all' &&
-                current.domains.length === 0 &&
-                current.services.length === 0;
-              return isDefault ? res.preferences! : current;
-            });
-          }
-        })
-        .catch(() => {});
     } finally {
       setIsLoading(false);
     }

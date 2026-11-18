@@ -3,6 +3,7 @@ import { Key, Plus, WarningCircle } from '@phosphor-icons/react';
 import { BaseModal } from '../../shared/components/modals';
 import { CreateTwoFactorModalContent } from './components/CreateTwoFactorModalContent';
 import { TwoFactorDetailsModalContent } from './components/TwoFactorDetailsModalContent';
+import { TwoFactorGeneratorModalContent } from './components/TwoFactorGeneratorModalContent';
 import { TwoFactorHeader } from './components/TwoFactorHeader';
 import { TwoFactorIssuerIcon } from './components/TwoFactorIssuerIcon';
 import { TwoFactorTokenList } from './components/TwoFactorTokenList';
@@ -21,6 +22,7 @@ export const TwoFactorView: React.FC = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isGeneratorModalOpen, setIsGeneratorModalOpen] = useState(false);
   const [selectedToken, setSelectedToken] =
     useState<TwoFactorTokenItem | null>(null);
 
@@ -70,6 +72,7 @@ export const TwoFactorView: React.FC = () => {
       {/* Page Title + Live Badge + Status Pills and Primary Actions */}
       <TwoFactorHeader
         onCreateClick={() => setIsCreateModalOpen(true)}
+        onOpenGeneratorClick={() => setIsGeneratorModalOpen(true)}
         totalTokensCount={tokens.length}
       />
 
@@ -111,6 +114,20 @@ export const TwoFactorView: React.FC = () => {
         <CreateTwoFactorModalContent
           onCancel={() => setIsCreateModalOpen(false)}
           onCreate={handleCreateToken}
+        />
+      </BaseModal>
+
+      {/* Reused Shared Modal: Live 2FA Code Generator */}
+      <BaseModal
+        isOpen={isGeneratorModalOpen}
+        onClose={() => setIsGeneratorModalOpen(false)}
+        title="2FA Code Generator"
+        subtitle="Enter a 2FA secret key to generate a live auto-refreshing TOTP code."
+        icon={<Key size={15} weight="duotone" />}
+      >
+        <TwoFactorGeneratorModalContent
+          nowMs={nowMs}
+          onClose={() => setIsGeneratorModalOpen(false)}
         />
       </BaseModal>
 

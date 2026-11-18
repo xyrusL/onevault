@@ -79,12 +79,49 @@ const ENDPOINTS_META: EndpointMeta[] = [
   },
 ];
 
-// Dynamic Live Baseline Stream Generator: Creates rolling time slots ending at current live time
-function generateCleanBaselineTelemetry(nowMs: number = Date.now()): ApiLiveTelemetryPoint[] {
+function mapCategoryToEndpointKey(
+  category: DashboardAuditLogItem['category']
+): 'notes' | 'mail' | 'twoFactor' | 'auth' | 'backup' | 'domains' {
+  switch (category) {
+    case 'notes':
+      return 'notes';
+    case 'mail':
+      return 'mail';
+    case 'two_factor':
+      return 'twoFactor';
+    case 'auth':
+      return 'auth';
+    case 'backup':
+      return 'backup';
+    default:
+      return 'domains';
+  }
+}
+
+// Dynamic Live Baseline Stream Generator: Creates flat baseline slots with discrete spikes from real events
+function generateCleanBaselineTelemetry(
+  nowMs: number = Date.now(),
+  recentLogs: DashboardAuditLogItem[] = []
+): ApiLiveTelemetryPoint[] {
   const points: ApiLiveTelemetryPoint[] = [];
   const totalSlots = 14;
   const slotStepMs = 2.5 * 60 * 1000; // 2.5 minutes per slot over past 35 minutes
   const startMs = nowMs - (totalSlots - 1) * slotStepMs;
+  const spanMs = Math.max(1, (totalSlots - 1) * slotStepMs);
+
+  const slotToEvents = new Map<number, DashboardAuditLogItem[]>();
+  for (const log of recentLogs) {
+    if (log.id.startsWith('audit_')) continue;
+    const tMs = new Date(log.createdAt).getTime();
+    if (isNaN(tMs) || tMs < startMs || tMs > nowMs) continue;
+    const slot = Math.max(
+      0,
+      Math.min(totalSlots - 1, Math.round(((tMs - startMs) / spanMs) * (totalSlots - 1)))
+    );
+    const list = slotToEvents.get(slot) ?? [];
+    list.push(log);
+    slotToEvents.set(slot, list);
+  }
 
   for (let i = 0; i < totalSlots; i++) {
     const slotTime = new Date(startMs + i * slotStepMs);
@@ -94,16 +131,36 @@ function generateCleanBaselineTelemetry(nowMs: number = Date.now()): ApiLiveTele
       second: '2-digit',
     });
 
+    let notes = 18;
+    let mail = 22;
+    let twoFactor = 15;
+    let auth = 19;
+    let backup = 28;
+    let domains = 21;
+
+    const events = slotToEvents.get(i) ?? [];
+    for (const evt of events) {
+      const bump = evt.level === 'error' ? 42 : evt.level === 'warning' ? 22 : 10;
+      const key = mapCategoryToEndpointKey(evt.category);
+      if (key === 'notes') notes += bump;
+      else if (key === 'mail') mail += bump;
+      else if (key === 'twoFactor') twoFactor += bump;
+      else if (key === 'auth') auth += bump;
+      else if (key === 'backup') backup += bump;
+      else domains += bump;
+    }
+
+    const avgLat = Math.round((notes + mail + twoFactor + auth + backup + domains) / 6);
     points.push({
       time: timeLabel,
-      latency: Math.round(22 + 2 * Math.sin(i * 0.5)),
+      latency: avgLat,
       status: 'ok',
-      notes: Math.round(22 + 2 * Math.sin(i * 0.45)),
-      mail: Math.round(21 + 2 * Math.sin(i * 0.35 + 1.2)),
-      twoFactor: Math.round(17 + 1.5 * Math.sin(i * 0.5 + 2.1)),
-      auth: Math.round(24 + 2 * Math.sin(i * 0.4 + 0.8)),
-      backup: Math.round(28 + 2 * Math.sin(i * 0.3 + 3.2)),
-      domains: Math.round(21 + 2 * Math.sin(i * 0.42 + 4.0)),
+      notes: Math.min(125, notes),
+      mail: Math.min(125, mail),
+      twoFactor: Math.min(125, twoFactor),
+      auth: Math.min(125, auth),
+      backup: Math.min(125, backup),
+      domains: Math.min(125, domains),
     });
   }
   return points;
@@ -343,8 +400,8 @@ export const ApiHealthLiveMonitor: React.FC<ApiHealthLiveMonitorProps> = ({
     }
     return apiHealth?.history && apiHealth.history.length > 0
       ? apiHealth.history
-      : generateCleanBaselineTelemetry(liveTimestamp);
-  }, [apiHealth, filterPeriod, liveTimestamp]);
+      : generateCleanBaselineTelemetry(liveTimestamp, recentLogs);
+  }, [apiHealth, filterPeriod, liveTimestamp, recentLogs]);
 
   // Multi-curve interactive filter toggle
   const handleToggleEndpoint = (key: string) => {

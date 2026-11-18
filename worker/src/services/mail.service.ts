@@ -178,27 +178,30 @@ async function syncWithCloudflare(env: Env): Promise<void> {
             ? forwardAction.value[0].trim().toLowerCase()
             : null;
 
-        // Historical base timestamp for pre-existing rules synced from Cloudflare (2024-01-01 + index)
-        // so they never incorrectly jump ahead of actual OneVault-created emails.
-        const importedCreatedAt = new Date(
-          new Date('2024-01-01T00:00:00.000Z').getTime() + i * 1000
-        ).toISOString();
+        const importedCreatedAt = new Date().toISOString();
 
         const match = byRuleId.get(ruleId) ?? byEmail.get(email);
         if (match) {
           seenIds.add(match.id);
+          const needsTimestampHeal =
+            !match.created_at || match.created_at.startsWith('2024-01-01');
+          const nextCreatedAt = needsTimestampHeal
+            ? importedCreatedAt
+            : match.created_at;
+
           if (
             match.routing_rule_id !== ruleId ||
             match.zone_id !== zone.id ||
             match.forward_to !== forwardTo ||
-            match.email !== email
+            match.email !== email ||
+            needsTimestampHeal
           ) {
             await env.DB.prepare(
               `UPDATE mail_accounts
-               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?
+               SET local_part = ?, domain = ?, email = ?, zone_id = ?, routing_rule_id = ?, forward_to = ?, created_at = ?
                WHERE id = ?`
             )
-              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, match.id)
+              .bind(localPart, domainPart, email, zone.id, ruleId, forwardTo, nextCreatedAt, match.id)
               .run();
           }
         } else {
@@ -273,12 +276,13 @@ export const mailService = {
     );
 
     const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
     try {
       await env.DB.prepare(
-        `INSERT INTO mail_accounts (id, local_part, domain, email, zone_id, routing_rule_id, forward_to, note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO mail_accounts (id, local_part, domain, email, zone_id, routing_rule_id, forward_to, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-        .bind(id, localPart, domain.name, email, domain.id, rule.id, forwardTo, note)
+        .bind(id, localPart, domain.name, email, domain.id, rule.id, forwardTo, note, createdAt)
         .run();
     } catch (err) {
       // Roll back the routing rule so Cloudflare and D1 never drift apart

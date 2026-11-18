@@ -72,39 +72,44 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Compute live rolling 24-hour timeline and map real incidents to curve slots
+  // Compute live rolling 24-hour timeline strictly from real actors & timestamps (zero synthetic curves)
   const velocityChartData = useMemo<ThreatVelocityDataPoint[]>(() => {
     const now = currentTime.getTime();
+    const sliceStepMs = 3 * 3600 * 1000;
+    const windowMs = 24 * 3600 * 1000;
     const points: ThreatVelocityDataPoint[] = [];
 
-    // Realistic baseline volume for legitimate traffic
-    const baselineLegit = [120, 85, 140, 320, 480, 560, 610, 430, 380];
-
-    // Identify all threat actors (scans, quarantines, blocks)
-    const threatActors = telemetry.recentActors.filter(
-      (a) => a.action !== 'ALLOW' || a.riskScore > 0
-    );
-
-    // Pre-assign each threat actor to the closest available time slice so every threat gets a prominent dot
+    const legitBySlice = new Map<number, number>();
+    const scansBySlice = new Map<number, number>();
+    const exploitsBySlice = new Map<number, number>();
     const assignedIncidents = new Map<number, ImmuneActorRecord>();
-    for (const actor of threatActors) {
+
+    for (const actor of telemetry.recentActors) {
       const actorTime = new Date(actor.lastSeenAt).getTime();
-      let bestSlice = 0;
-      let minDiff = Infinity;
-      for (let s = 0; s <= 8; s++) {
-        const sliceTime = now - s * 3 * 3600 * 1000;
-        const diff = Math.abs(actorTime - sliceTime);
-        if (diff < minDiff && !assignedIncidents.has(s)) {
-          minDiff = diff;
-          bestSlice = s;
-        }
+      if (isNaN(actorTime) || now - actorTime > windowMs || actorTime > now + 60_000) {
+        continue;
       }
-      assignedIncidents.set(bestSlice, actor);
+
+      const ageMs = Math.max(0, now - actorTime);
+      const sliceIndex = Math.max(0, Math.min(8, Math.round(ageMs / sliceStepMs)));
+      const reqCount = Math.max(1, actor.requestCount || 0);
+
+      if (actor.action === 'PENETRATION_BLOCK') {
+        exploitsBySlice.set(sliceIndex, (exploitsBySlice.get(sliceIndex) ?? 0) + reqCount);
+        assignedIncidents.set(sliceIndex, actor);
+      } else if (actor.action === 'TEMP_QUARANTINE' || actor.action === 'RATE_LIMITED') {
+        scansBySlice.set(sliceIndex, (scansBySlice.get(sliceIndex) ?? 0) + reqCount);
+        if (!assignedIncidents.has(sliceIndex)) {
+          assignedIncidents.set(sliceIndex, actor);
+        }
+      } else {
+        legitBySlice.set(sliceIndex, (legitBySlice.get(sliceIndex) ?? 0) + reqCount);
+      }
     }
 
     // Generate 9 time slices across the past 24 hours (every 3 hours)
     for (let i = 8; i >= 0; i--) {
-      const pointTime = new Date(now - i * 3 * 3600 * 1000);
+      const pointTime = new Date(now - i * sliceStepMs);
       const timeStr =
         i === 0
           ? 'Now'
@@ -114,28 +119,11 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
               hour12: false,
             });
 
-      const matchedActor = assignedIncidents.get(i);
-
-      // Default baseline counts with active real actor overrides
       const legitCount =
-        baselineLegit[8 - i] +
-        (i === 0 ? Math.min(telemetry.legitimateActorsAllowed, 50) : 0);
-
-      let scanCount = 0;
-      let exploitCount = 0;
-
-      if (matchedActor) {
-        if (matchedActor.action === 'PENETRATION_BLOCK') {
-          // Clear, visible rose peak (65-90 req/s) so the exploit block dot is prominent
-          exploitCount = Math.max(68, Math.min(120, (matchedActor.requestCount || 5) * 8));
-        } else if (
-          matchedActor.action === 'TEMP_QUARANTINE' ||
-          matchedActor.action === 'RATE_LIMITED'
-        ) {
-          // Clear, visible amber peak (75-110 req/s) so the scanner dot is prominent
-          scanCount = Math.max(78, Math.min(130, (matchedActor.requestCount || 12) * 2.5));
-        }
-      }
+        legitBySlice.get(i) ?? (i === 0 ? telemetry.legitimateActorsAllowed : 0);
+      const scanCount = scansBySlice.get(i) ?? 0;
+      const exploitCount = exploitsBySlice.get(i) ?? 0;
+      const matchedActor = assignedIncidents.get(i);
 
       points.push({
         time: timeStr,
@@ -143,60 +131,62 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
         legitimate: legitCount,
         scans: scanCount,
         exploits: exploitCount,
-        incident: matchedActor || undefined,
+        incident: matchedActor,
       });
     }
 
     return points;
   }, [currentTime, telemetry.recentActors, telemetry.legitimateActorsAllowed]);
 
-  // Compute live threat vector breakdown from real telemetry
+  // Compute live threat vector breakdown strictly from real telemetry (zero hardcoded fallbacks)
   const threatVectorBars = useMemo(() => {
-    const raw404 = telemetry.pageScansIntercepted || 14;
-    const honeypot = telemetry.honeypotTrapsTriggered || 8;
-    const penetration = telemetry.penetrationAttemptsBlocked || 19;
-    const sqli = Math.max(2, Math.round(penetration * 0.35));
-    const ua = Math.max(1, Math.round(penetration * 0.2));
-    const credential = Math.max(1, Math.round(raw404 * 0.15));
-    const consoleMalware = 5;
+    const raw404 = telemetry.pageScansIntercepted ?? 0;
+    const honeypot = telemetry.honeypotTrapsTriggered ?? 0;
+    const sqli = telemetry.penetrationAttemptsBlocked ?? 0;
+    const ua = telemetry.recentActors.filter((a) =>
+      /scanner|user-agent|signature/i.test(a.detectionVector)
+    ).length;
+    const credential = telemetry.activeRateLimitedIps ?? 0;
+    const consoleMalware = 0;
 
     const total = raw404 + honeypot + sqli + ua + credential + consoleMalware;
+    const calcPct = (count: number) => (total > 0 ? Math.round((count / total) * 100) : 0);
 
     return [
       {
         name: '404 Route Enumeration',
         count: raw404,
-        pct: Math.round((raw404 / total) * 100),
+        pct: calcPct(raw404),
         color: 'bg-amber-400',
       },
       {
         name: 'Canary Honeypots (/.env, /admin)',
         count: honeypot,
-        pct: Math.round((honeypot / total) * 100),
+        pct: calcPct(honeypot),
         color: 'bg-rose-500',
       },
       {
         name: 'DevTools Console Injection & Self-XSS',
         count: consoleMalware,
-        pct: Math.round((consoleMalware / total) * 100),
+        pct: calcPct(consoleMalware),
         color: 'bg-emerald-400',
       },
       {
         name: 'SQLi & Path Traversal',
         count: sqli,
-        pct: Math.round((sqli / total) * 100),
+        pct: calcPct(sqli),
         color: 'bg-purple-400',
       },
       {
         name: 'Scanner User-Agents',
         count: ua,
-        pct: Math.round((ua / total) * 100),
+        pct: calcPct(ua),
         color: 'bg-red-400',
       },
       {
         name: 'Credential Stuffing Burst',
         count: credential,
-        pct: Math.round((credential / total) * 100),
+        pct: calcPct(credential),
         color: 'bg-sky-400',
       },
     ];
@@ -204,6 +194,8 @@ export const ThreatDefenseView: React.FC<ThreatDefenseViewProps> = ({
     telemetry.pageScansIntercepted,
     telemetry.honeypotTrapsTriggered,
     telemetry.penetrationAttemptsBlocked,
+    telemetry.recentActors,
+    telemetry.activeRateLimitedIps,
   ]);
 
   const { verificationSuite } = telemetry;

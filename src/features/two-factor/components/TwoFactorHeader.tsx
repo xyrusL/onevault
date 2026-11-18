@@ -1,13 +1,15 @@
 import React from 'react';
-import { ClockCountdown, Plus, ShieldCheck } from '@phosphor-icons/react';
+import { ClockCountdown, Key, Plus, ShieldCheck } from '@phosphor-icons/react';
 
 interface TwoFactorHeaderProps {
   onCreateClick: () => void;
+  onOpenGeneratorClick: () => void;
   totalTokensCount: number;
 }
 
 export const TwoFactorHeader: React.FC<TwoFactorHeaderProps> = ({
   onCreateClick,
+  onOpenGeneratorClick,
   totalTokensCount,
 }) => {
   return (
@@ -50,6 +52,15 @@ export const TwoFactorHeader: React.FC<TwoFactorHeaderProps> = ({
             className="transition-transform duration-200 group-hover:rotate-90"
           />
           <span className="leading-none">New 2FA</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenGeneratorClick}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-default bg-surface hover:bg-elevated text-fg-primary px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors duration-200 cursor-pointer"
+        >
+          <Key size={14} weight="duotone" className="text-indigo-400" />
+          <span className="leading-none">Generate Code</span>
         </button>
       </div>
     </header>

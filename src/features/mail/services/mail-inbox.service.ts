@@ -33,7 +33,12 @@ const detailCache = new Map<string, MailInboxMessageDetail>();
 let activityCache: MailActivityItem[] | null = null;
 
 function toSummary(dto: MailMessageSummaryDto): MailInboxMessageSummary {
-  const dt = new Date(dto.receivedAt);
+  const raw = dto.receivedAt;
+  const normalizedTs =
+    raw && !raw.includes('T') && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(raw)
+      ? `${raw.replace(' ', 'T')}Z`
+      : raw;
+  const dt = new Date(normalizedTs);
   return {
     id: dto.id,
     mailAccountId: dto.mailAccountId,
@@ -43,7 +48,7 @@ function toSummary(dto: MailMessageSummaryDto): MailInboxMessageSummary {
     subject: dto.subject,
     snippet: dto.snippet,
     isRead: dto.isRead,
-    receivedAt: dto.receivedAt,
+    receivedAt: normalizedTs,
     receivedDate: dt.toLocaleDateString('en-US', {
       month: 'short',
       day: '2-digit',

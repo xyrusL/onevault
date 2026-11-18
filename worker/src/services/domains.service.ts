@@ -94,7 +94,7 @@ export const domainsService = {
           name TEXT NOT NULL UNIQUE,
           status TEXT DEFAULT 'active',
           name_servers TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         )
       `).run();
       await env.DB.prepare(`
@@ -110,8 +110,8 @@ export const domainsService = {
           proxied INTEGER DEFAULT 1,
           comment TEXT,
           cf_record_id TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
         )
       `).run();
     } catch {
@@ -889,11 +889,47 @@ export const domainsService = {
     }
 
     const newId = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
+    // Provision Cloudflare Email Routing MX & SPF DNS records on the zone (gracefully ignore duplicates/offline)
+    const emailRoutingDnsRecords: Array<{
+      type: 'MX' | 'TXT';
+      name: string;
+      content: string;
+      priority?: number;
+    }> = [
+      { type: 'MX', name: fullDomain, content: 'route1.mx.cloudflare.net', priority: 49 },
+      { type: 'MX', name: fullDomain, content: 'route2.mx.cloudflare.net', priority: 63 },
+      { type: 'MX', name: fullDomain, content: 'route3.mx.cloudflare.net', priority: 20 },
+      {
+        type: 'TXT',
+        name: fullDomain,
+        content: 'v=spf1 include:_spf.mx.cloudflare.net ~all',
+      },
+    ];
+
+    await Promise.all(
+      emailRoutingDnsRecords.map((rec) =>
+        cfFetch<CfDnsRecord>(env, `/zones/${zone.id}/dns_records`, {
+          method: 'POST',
+          body: JSON.stringify({
+            type: rec.type,
+            name: rec.name,
+            content: rec.content,
+            priority: rec.priority,
+            ttl: 1,
+            proxied: false,
+            comment: 'OneVault Email Routing subdomain record',
+          }),
+        }).catch(() => undefined)
+      )
+    );
+
     await env.DB.prepare(
-      `INSERT INTO mail_subdomains (id, zone_id, root_domain, subdomain, full_domain, dns_status)
-       VALUES (?, ?, ?, ?, ?, 'ready')`
+      `INSERT INTO mail_subdomains (id, zone_id, root_domain, subdomain, full_domain, dns_status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'ready', ?)`
     )
-      .bind(newId, zone.id, zone.name, subPart, fullDomain)
+      .bind(newId, zone.id, zone.name, subPart, fullDomain, createdAt)
       .run();
 
     return {
@@ -903,7 +939,7 @@ export const domainsService = {
       subdomain: subPart,
       fullDomain,
       dnsStatus: 'ready',
-      createdAt: new Date().toISOString(),
+      createdAt,
     };
   },
 
@@ -912,10 +948,67 @@ export const domainsService = {
     fullDomain: string
   ): Promise<{ deletedAccountsCount: number; deletedDnsRecordsCount: number }> {
     const normalized = fullDomain.trim().toLowerCase();
-    await env.DB.prepare('DELETE FROM mail_subdomains WHERE full_domain = ?')
+    let deletedAccountsCount = 0;
+    let deletedDnsRecordsCount = 0;
+
+    // 1. Delete associated mail_accounts & their Cloudflare Email Routing rules
+    const { results: accounts } = await env.DB.prepare(
+      'SELECT id, zone_id, routing_rule_id FROM mail_accounts WHERE LOWER(domain) = ?'
+    )
+      .bind(normalized)
+      .all<{ id: string; zone_id: string; routing_rule_id: string | null }>();
+
+    for (const acc of accounts || []) {
+      if (acc.routing_rule_id && acc.zone_id) {
+        await cfFetch(
+          env,
+          `/zones/${acc.zone_id}/email/routing/rules/${acc.routing_rule_id}`,
+          { method: 'DELETE' }
+        ).catch(() => undefined);
+      }
+      await env.DB.prepare('DELETE FROM mail_accounts WHERE id = ?')
+        .bind(acc.id)
+        .run()
+        .catch(() => undefined);
+      deletedAccountsCount += 1;
+    }
+
+    // 2. Delete associated Cloudflare Email Routing MX/SPF DNS records for this subdomain
+    const zoneId = await this.resolveZoneId(env, normalized);
+    if (zoneId) {
+      try {
+        const cfRecords = await cfFetch<CfDnsRecord[]>(
+          env,
+          `/zones/${zoneId}/dns_records?name=${encodeURIComponent(normalized)}&per_page=100`
+        );
+        for (const rec of cfRecords || []) {
+          const recName = rec.name.toLowerCase();
+          const recContent = rec.content.toLowerCase();
+          const isEmailRoutingRecord =
+            recName === normalized &&
+            ((rec.type === 'MX' && recContent.includes('.mx.cloudflare.net')) ||
+              (rec.type === 'TXT' && recContent.includes('_spf.mx.cloudflare.net')));
+          if (isEmailRoutingRecord) {
+            await cfFetch(env, `/zones/${zoneId}/dns_records/${rec.id}`, {
+              method: 'DELETE',
+            })
+              .then(() => {
+                deletedDnsRecordsCount += 1;
+              })
+              .catch(() => undefined);
+          }
+        }
+      } catch {
+        // Ignore Cloudflare DNS cleanup errors if offline/unavailable
+      }
+    }
+
+    // 3. Remove subdomain registration from D1
+    await env.DB.prepare('DELETE FROM mail_subdomains WHERE LOWER(full_domain) = ?')
       .bind(normalized)
       .run()
       .catch(() => undefined);
-    return { deletedAccountsCount: 0, deletedDnsRecordsCount: 0 };
+
+    return { deletedAccountsCount, deletedDnsRecordsCount };
   },
 };

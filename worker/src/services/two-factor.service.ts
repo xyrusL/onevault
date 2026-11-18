@@ -48,12 +48,13 @@ export const twoFactorService = {
     const digits = Number(input.digits) || 6;
     const period = Number(input.period) || 30;
     const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
 
     await env.DB.prepare(
-      `INSERT INTO two_factor_tokens (id, issuer, label, secret, algorithm, digits, period, otpauth_uri)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO two_factor_tokens (id, issuer, label, secret, algorithm, digits, period, otpauth_uri, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, issuer, label, secret, algorithm, digits, period, otpauthUri)
+      .bind(id, issuer, label, secret, algorithm, digits, period, otpauthUri, createdAt)
       .run();
 
     const row = await env.DB.prepare('SELECT * FROM two_factor_tokens WHERE id = ?')

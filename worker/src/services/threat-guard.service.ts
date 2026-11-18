@@ -1139,7 +1139,7 @@ export const threatGuardService = {
         responseAction: 'BLOCKED AT BROWSER FRONTLINE (0 Worker Calls · Quota Shield)',
         falsePositiveGuard:
           'Executes 100% in client browser memory; protects Cloudflare Free Worker from exhaustion',
-        interceptedCount: 17,
+        interceptedCount: 0,
         status: 'active',
       },
     ];

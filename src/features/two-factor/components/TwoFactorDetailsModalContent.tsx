@@ -10,8 +10,6 @@ import {
 } from '@phosphor-icons/react';
 import { twoFactorService } from '../services/two-factor.service';
 import { TwoFactorTokenItem } from '../types/two-factor.types';
-import { resolveIssuerTheme } from '../utils/two-factor-icon.utils';
-import { TwoFactorIssuerIcon } from './TwoFactorIssuerIcon';
 
 interface TwoFactorDetailsModalContentProps {
   token: TwoFactorTokenItem;
@@ -23,12 +21,11 @@ interface TwoFactorDetailsModalContentProps {
 export const TwoFactorDetailsModalContent: React.FC<
   TwoFactorDetailsModalContentProps
 > = ({ token, nowMs, onClose, onDelete }) => {
-  const [copiedField, setCopiedField] = useState<'code' | 'uri' | null>(null);
+  const [copiedField, setCopiedField] = useState<'code' | 'secret' | 'uri' | null>(null);
 
   const live = twoFactorService.generateLiveCode(token, nowMs);
-  const theme = resolveIssuerTheme(token.issuer);
 
-  const handleCopy = (text: string, field: 'code' | 'uri') => {
+  const handleCopy = (text: string, field: 'code' | 'secret' | 'uri') => {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 1400);
@@ -37,48 +34,34 @@ export const TwoFactorDetailsModalContent: React.FC<
   return (
     <div className="space-y-3.5">
       {/* Live TOTP Summary Card */}
-      <div className="rounded-lg bg-elevated border border-default p-3 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border p-1.5 ${theme.bg} ${theme.border} ${theme.text}`}
-            >
-              <TwoFactorIssuerIcon issuer={token.issuer} size="md" />
-            </div>
-            <div className="min-w-0">
-              <span className="font-display text-sm font-semibold text-fg-primary leading-none truncate block">
-                {token.issuer}
-              </span>
-              <span className="font-mono text-xs text-fg-muted truncate block mt-1">
-                {token.label}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div className="rounded-lg bg-elevated border border-default p-3 flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted leading-none">
+          <Key size={13} weight="duotone" className="shrink-0" />
+          <span>Live 2FA Code ({live.remainingSeconds}s)</span>
+        </span>
 
-        <div className="flex items-center justify-between gap-2 border-t border-subtle pt-2.5">
-          <span className="inline-flex items-center gap-1.5 text-xs text-fg-muted leading-none">
-            <Key size={13} weight="duotone" className="shrink-0" />
-            <span>Live 2FA Code ({live.remainingSeconds}s)</span>
+        <div className="inline-flex items-center gap-2">
+          <span className="font-mono text-sm font-bold tracking-wider text-emerald-400 leading-none">
+            {live.formattedCode}
           </span>
-
-          <div className="inline-flex items-center gap-1.5">
-            <span className="font-mono text-xs font-semibold tracking-wider text-fg-primary leading-none">
-              {live.formattedCode}
-            </span>
-            <button
-              type="button"
-              onClick={() => handleCopy(live.rawCode, 'code')}
-              title="Copy 2FA code"
-              className="inline-flex h-5 w-5 items-center justify-center rounded text-fg-muted hover:text-fg-primary transition-colors cursor-pointer"
-            >
-              {copiedField === 'code' ? (
-                <Check size={12} weight="bold" className="text-success" />
-              ) : (
-                <Copy size={12} weight="regular" />
-              )}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => handleCopy(live.rawCode, 'code')}
+            title="Copy 2FA code"
+            className="inline-flex items-center gap-1 rounded border border-default bg-surface px-1.5 py-0.5 text-[11px] font-medium text-fg-secondary hover:text-fg-primary transition-colors cursor-pointer"
+          >
+            {copiedField === 'code' ? (
+              <>
+                <Check size={11} weight="bold" className="text-success" />
+                <span className="text-success">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy size={11} weight="regular" />
+                <span>Copy Code</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -102,6 +85,39 @@ export const TwoFactorDetailsModalContent: React.FC<
           <p className="font-mono text-xs font-semibold text-fg-primary leading-none">
             {token.createdTime}
           </p>
+        </div>
+      </div>
+
+      {/* Secret Key (2FA Code) */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs font-medium text-fg-secondary">
+          <span className="inline-flex items-center gap-1.5 leading-none">
+            <Key size={13} weight="duotone" />
+            <span>Secret Key (2FA Code)</span>
+            <span className="font-mono text-[10px] text-fg-muted font-normal">
+              {token.algorithm} · {token.digits} digits · {token.period}s
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => handleCopy(token.secret, 'secret')}
+            className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg-primary transition-colors cursor-pointer"
+          >
+            {copiedField === 'secret' ? (
+              <>
+                <Check size={12} weight="bold" className="text-success" />
+                <span className="text-success">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy size={12} weight="regular" />
+                <span>Copy Key</span>
+              </>
+            )}
+          </button>
+        </div>
+        <div className="rounded-md bg-input border border-default px-3 py-2 font-mono text-xs font-semibold tracking-wider text-fg-primary break-all select-all">
+          {token.secret}
         </div>
       </div>
 

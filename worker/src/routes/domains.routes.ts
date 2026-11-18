@@ -129,6 +129,6 @@ domainsRoutes.delete('/subdomains/:fullDomain', async (c) => {
   if (!fullDomain) {
     throw new HttpError(400, 'fullDomain parameter is required.');
   }
-  await domainsService.deleteSubdomain(c.env, fullDomain);
-  return c.json({ ok: true });
+  const result = await domainsService.deleteSubdomain(c.env, fullDomain);
+  return c.json({ ok: true, ...result });
 });

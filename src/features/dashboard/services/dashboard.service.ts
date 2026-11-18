@@ -5,8 +5,17 @@ import type {
   ImmuneSystemTelemetry,
 } from '../types/dashboard.types';
 
-const DASHBOARD_CACHE_KEY = 'onevault.dashboard.cache.v1';
+const LEGACY_DASHBOARD_CACHE_KEY_V1 = 'onevault.dashboard.cache.v1';
+const LEGACY_DASHBOARD_CACHE_KEY_V2 = 'onevault.dashboard.cache.v2';
+const DASHBOARD_CACHE_KEY = 'onevault.dashboard.cache.v3';
 const AUTH_SESSION_STORAGE_KEY = 'onevault-auth-session';
+
+try {
+  localStorage.removeItem(LEGACY_DASHBOARD_CACHE_KEY_V1);
+  localStorage.removeItem(LEGACY_DASHBOARD_CACHE_KEY_V2);
+} catch {
+  // Ignore storage errors
+}
 
 let memoryStats: DashboardStats | null = (() => {
   try {

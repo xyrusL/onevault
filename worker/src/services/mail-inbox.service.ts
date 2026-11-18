@@ -80,12 +80,13 @@ export const mailInboxService = {
   ): Promise<MailMessageDetailDto> {
     const parsed = await parseIncomingMime(rawSource, fallbackFrom);
     const id = crypto.randomUUID();
+    const receivedAt = new Date().toISOString();
 
     await env.DB.prepare(
       `INSERT INTO mail_messages (
          id, mail_account_id, recipient_email, sender, sender_name,
-         subject, snippet, text_body, html_body, raw_mime, is_read
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`
+         subject, snippet, text_body, html_body, raw_mime, is_read, received_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`
     )
       .bind(
         id,
@@ -97,7 +98,8 @@ export const mailInboxService = {
         parsed.snippet,
         parsed.textBody,
         parsed.htmlBody,
-        parsed.rawMime
+        parsed.rawMime,
+        receivedAt
       )
       .run();
 
@@ -118,6 +120,7 @@ export const mailInboxService = {
     headers?: Headers
   ): Promise<void> {
     const id = crypto.randomUUID();
+    const receivedAt = new Date().toISOString();
     const { sender, senderName } = parseFromHeader(
       headers?.get('from'),
       fallbackFrom
@@ -130,8 +133,8 @@ export const mailInboxService = {
     await env.DB.prepare(
       `INSERT INTO mail_messages (
          id, mail_account_id, recipient_email, sender, sender_name,
-         subject, snippet, text_body, html_body, raw_mime, is_read
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, '', 0)`
+         subject, snippet, text_body, html_body, raw_mime, is_read, received_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, '', 0, ?)`
     )
       .bind(
         id,
@@ -140,7 +143,8 @@ export const mailInboxService = {
         sender,
         senderName,
         subject,
-        snippet
+        snippet,
+        receivedAt
       )
       .run();
   },

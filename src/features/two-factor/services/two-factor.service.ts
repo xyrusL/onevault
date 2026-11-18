@@ -20,11 +20,18 @@ interface TwoFactorTokenDto {
 }
 
 const LEGACY_DEMO_STORAGE_KEY = 'onevault-temp-2fa-tokens';
-const CACHE_STORAGE_KEY = 'onevault.two-factor.cache.v1';
+const LEGACY_CACHE_STORAGE_KEY = 'onevault.two-factor.cache.v1';
+const CACHE_STORAGE_KEY = 'onevault.two-factor.cache.v2';
+const LEGACY_DEMO_TOKEN_IDS = new Set([
+  'totp_cloudflare_edge',
+  'totp_github_team',
+  'totp_google_workspace',
+]);
 
-// Clean up any legacy demo tokens from earlier localStorage builds
+// Clean up any legacy demo tokens and v1 cache from earlier builds
 try {
   localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_CACHE_STORAGE_KEY);
 } catch {
   // Ignore storage errors
 }
@@ -48,7 +55,12 @@ function persistCache(tokens: TwoFactorTokenItem[]) {
 }
 
 function toItem(dto: TwoFactorTokenDto): TwoFactorTokenItem {
-  const created = new Date(dto.createdAt);
+  const raw = dto.createdAt;
+  const normalizedTs =
+    raw && !raw.includes('T') && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(raw)
+      ? `${raw.replace(' ', 'T')}Z`
+      : raw;
+  const created = new Date(normalizedTs);
   return {
     id: dto.id,
     issuer: dto.issuer,
@@ -71,6 +83,38 @@ function toItem(dto: TwoFactorTokenDto): TwoFactorTokenItem {
   };
 }
 
+export interface GeneratedTwoFactorPreview extends LiveTotpCode {
+  period: number;
+  digits: number;
+  algorithm: 'SHA1' | 'SHA256' | 'SHA512';
+  cleanSecret: string;
+  issuer: string;
+  label: string;
+}
+
+function computeTotpDisplay(
+  totp: OTPAuth.TOTP,
+  period: number,
+  nowMs: number
+): LiveTotpCode {
+  const safePeriod = period > 0 ? period : 30;
+  const rawCode = totp.generate({ timestamp: nowMs });
+  const mid = Math.ceil(rawCode.length / 2);
+  const formattedCode = `${rawCode.slice(0, mid)} ${rawCode.slice(mid)}`;
+
+  const epochSeconds = Math.floor(nowMs / 1000);
+  const elapsed = epochSeconds % safePeriod;
+  const remainingSeconds = safePeriod - elapsed;
+  const progressPercent = (remainingSeconds / safePeriod) * 100;
+
+  return {
+    formattedCode,
+    rawCode,
+    remainingSeconds,
+    progressPercent,
+  };
+}
+
 export const twoFactorService = {
   /** Returns last known D1 tokens synchronously so UI renders without flashing. */
   getCached(): TwoFactorTokenItem[] | null {
@@ -80,7 +124,9 @@ export const twoFactorService = {
   /** Fetches all saved 2FA tokens from `onevault-storage` D1 via `/api/two-factor`. */
   async list(): Promise<TwoFactorTokenItem[]> {
     const rows = await apiRequest<TwoFactorTokenDto[]>('/two-factor');
-    const items = rows.map(toItem);
+    const items = rows
+      .filter((row) => !LEGACY_DEMO_TOKEN_IDS.has(row.id))
+      .map(toItem);
     persistCache(items);
     return items;
   },
@@ -120,21 +166,7 @@ export const twoFactorService = {
         ),
       });
 
-      const rawCode = totp.generate({ timestamp: nowMs });
-      const mid = Math.ceil(rawCode.length / 2);
-      const formattedCode = `${rawCode.slice(0, mid)} ${rawCode.slice(mid)}`;
-
-      const epochSeconds = Math.floor(nowMs / 1000);
-      const elapsed = epochSeconds % item.period;
-      const remainingSeconds = item.period - elapsed;
-      const progressPercent = (remainingSeconds / item.period) * 100;
-
-      return {
-        formattedCode,
-        rawCode,
-        remainingSeconds,
-        progressPercent,
-      };
+      return computeTotpDisplay(totp, item.period, nowMs);
     } catch {
       return {
         formattedCode: '000 000',
@@ -143,6 +175,99 @@ export const twoFactorService = {
         progressPercent: 100,
       };
     }
+  },
+
+  /**
+   * Generates a live, auto-refreshing TOTP code from raw user input
+   * (either a raw secret key like `afasdf3423` / `H43ML3UEPXT5GHRS` or an `otpauth://` URI).
+   * Auto-detects period, digits, algorithm, issuer, and label when present.
+   */
+  generateFromRawInput(
+    rawInput: string,
+    nowMs = Date.now()
+  ): GeneratedTwoFactorPreview | null {
+    const trimmed = rawInput.trim();
+    if (!trimmed) return null;
+
+    let algorithm: 'SHA1' | 'SHA256' | 'SHA512' = 'SHA1';
+    let digits = 6;
+    let period = 30;
+    let issuer = '';
+    let label = '';
+    let rawSecret = trimmed;
+
+    // Try full URI / query-string metadata detection first
+    try {
+      const parsed = this.parseOtpInput(trimmed);
+      algorithm = parsed.algorithm;
+      digits = parsed.digits;
+      period = parsed.period;
+      issuer = parsed.issuer;
+      label = parsed.label;
+      rawSecret = parsed.secret;
+    } catch {
+      // If user pasted a partial URI or URL containing secret=, try extracting query params
+      if (trimmed.toLowerCase().startsWith('otpauth://') || trimmed.includes('secret=')) {
+        const queryIdx = trimmed.indexOf('?');
+        if (queryIdx !== -1) {
+          const params = new URLSearchParams(trimmed.slice(queryIdx + 1));
+          const sec = params.get('secret');
+          if (!sec) return null;
+          rawSecret = sec;
+          const algoParam = (params.get('algorithm') || '').toUpperCase();
+          if (algoParam === 'SHA256' || algoParam === 'SHA512') {
+            algorithm = algoParam;
+          }
+          const parsedDigits = Number(params.get('digits'));
+          if (parsedDigits >= 4 && parsedDigits <= 10) digits = parsedDigits;
+          const parsedPeriod = Number(params.get('period'));
+          if (parsedPeriod >= 5 && parsedPeriod <= 300) period = parsedPeriod;
+          issuer = (params.get('issuer') || params.get('service') || '').trim();
+          label = (params.get('account') || params.get('label') || '').trim();
+        } else {
+          return null;
+        }
+      }
+    }
+
+    const cleanSecret = rawSecret
+      .replace(/[\s-]+/g, '')
+      .replace(/=+$/g, '')
+      .toUpperCase();
+
+    if (!cleanSecret) return null;
+
+    let secretObj: OTPAuth.Secret;
+    if (/^[A-Z2-7]+$/.test(cleanSecret)) {
+      try {
+        secretObj = OTPAuth.Secret.fromBase32(cleanSecret);
+      } catch {
+        secretObj = OTPAuth.Secret.fromUTF8(cleanSecret);
+      }
+    } else {
+      secretObj = OTPAuth.Secret.fromUTF8(cleanSecret);
+    }
+
+    const totp = new OTPAuth.TOTP({
+      issuer: issuer || undefined,
+      label: label || '2FA Preview',
+      algorithm,
+      digits,
+      period,
+      secret: secretObj,
+    });
+
+    const live = computeTotpDisplay(totp, period, nowMs);
+
+    return {
+      ...live,
+      period,
+      digits,
+      algorithm,
+      cleanSecret: secretObj.base32 || cleanSecret,
+      issuer,
+      label,
+    };
   },
 
   /**

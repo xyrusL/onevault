@@ -65,396 +65,7 @@ export interface TelemetryGraphPoint {
   incidentReason?: string;
 }
 
-const HISTORICAL_ENDPOINT_RECORDS: ApiEndpointHistoryRecord[] = [
-  // Notes API
-  {
-    id: 'notes-1',
-    endpointKey: 'notes',
-    type: 'outage',
-    title: 'Cloudflare D1 Cold-Start Timeout',
-    reason: 'Database SQLite V8 isolate replication lag during region cold-start',
-    description: 'Incoming /api/notes requests timed out due to delayed read-replica replication across edge colos.',
-    statusCode: 504,
-    latencyMs: 124,
-    timestamp: 'Oct 04, 2026 · 14:22 UTC',
-    resolution: 'Auto-recovered via fallback edge isolate in 120s',
-    dateCycle: '30d',
-  },
-  {
-    id: 'notes-2',
-    endpointKey: 'notes',
-    type: 'warning',
-    title: 'High Content Serialization Payload',
-    reason: 'Heavy encrypted note payload exceeded edge memory soft threshold',
-    description: 'Bulk note sync triggered temporary response compression queue throttle.',
-    statusCode: 413,
-    latencyMs: 58,
-    timestamp: 'Oct 08, 2026 · 09:15 UTC',
-    resolution: 'Compressed chunks streamed; memory recovered',
-    dateCycle: '30d',
-  },
-  {
-    id: 'notes-3',
-    endpointKey: 'notes',
-    type: 'healthy',
-    title: 'KV Cache Hit & Edge Decryption',
-    reason: 'Standard read request served from local colo cache',
-    description: 'Note metadata verified against HMAC signature without origin round-trip.',
-    statusCode: 200,
-    latencyMs: 18,
-    timestamp: 'Oct 12, 2026 · 12:45 UTC',
-    resolution: 'Operating normally with sub-20ms latency',
-    dateCycle: '24h',
-  },
-  {
-    id: 'notes-4',
-    endpointKey: 'notes',
-    type: 'healthy',
-    title: 'Encrypted Note Metadata Sync',
-    reason: 'AES-GCM encrypted note sync executed successfully',
-    description: 'Zero-knowledge payload persisted to SQLite D1 database.',
-    statusCode: 200,
-    latencyMs: 16,
-    timestamp: 'Oct 12, 2026 · 22:05 UTC',
-    resolution: 'Healthy edge transaction',
-    dateCycle: '1h',
-  },
-  {
-    id: 'notes-5',
-    endpointKey: 'notes',
-    type: 'warning',
-    title: 'Bulk Note Sync Rate Throttle',
-    reason: 'Rapid burst of note sync requests exceeded soft rate limit',
-    description: 'Temporary 429 throttle applied while D1 batch queue drained.',
-    statusCode: 429,
-    latencyMs: 46,
-    timestamp: 'Oct 12, 2026 · 21:40 UTC',
-    resolution: 'Queue drained automatically within 3 seconds',
-    dateCycle: '1h',
-  },
-
-  // Mail API
-  {
-    id: 'mail-1',
-    endpointKey: 'mail',
-    type: 'outage',
-    title: 'Email Routing Worker Queue Spike',
-    reason: 'Batch inbound queue throttle exceeded maximum concurrency',
-    description: 'Multiple automated verification emails overwhelmed inbound isolate queue.',
-    statusCode: 502,
-    latencyMs: 98,
-    timestamp: 'Sep 28, 2026 · 22:10 UTC',
-    resolution: 'Queue drained and worker concurrency scaled automatically',
-    dateCycle: '1y',
-  },
-  {
-    id: 'mail-2',
-    endpointKey: 'mail',
-    type: 'warning',
-    title: 'Inbound Batch Processing Delay',
-    reason: 'Cloudflare Email Routing MIME parser temporary delay',
-    description: 'Incoming email batch processing triggered temporary Cloudflare queue throttle.',
-    statusCode: 429,
-    latencyMs: 58,
-    timestamp: 'Oct 10, 2026 · 08:14 UTC',
-    resolution: 'Resolved automatically within 180 seconds',
-    dateCycle: '30d',
-  },
-  {
-    id: 'mail-3',
-    endpointKey: 'mail',
-    type: 'healthy',
-    title: 'Email Routing Rule Forwarded',
-    reason: 'Cloudflare Email Routing rule executed smoothly',
-    description: 'Message routed to destination mailbox without retaining plaintext body.',
-    statusCode: 200,
-    latencyMs: 24,
-    timestamp: 'Oct 12, 2026 · 13:10 UTC',
-    resolution: 'Operating normally',
-    dateCycle: '24h',
-  },
-  {
-    id: 'mail-4',
-    endpointKey: 'mail',
-    type: 'healthy',
-    title: 'Direct Vault Inbox MIME Storage',
-    reason: 'None-forwarding mailbox stored encrypted body in D1',
-    description: 'MIME body encrypted client-side and saved to SQLite D1 table.',
-    statusCode: 200,
-    latencyMs: 21,
-    timestamp: 'Oct 12, 2026 · 22:12 UTC',
-    resolution: 'Normal operation',
-    dateCycle: '1h',
-  },
-  {
-    id: 'mail-5',
-    endpointKey: 'mail',
-    type: 'warning',
-    title: 'Inbound Routing Queue Burst',
-    reason: 'Multiple automated verification emails arrived in 60s window',
-    description: 'Temporary worker isolate queue throttle.',
-    statusCode: 429,
-    latencyMs: 45,
-    timestamp: 'Oct 12, 2026 · 21:35 UTC',
-    resolution: 'Auto-scaled and cleared in 4 seconds',
-    dateCycle: '1h',
-  },
-
-  // 2FA Authenticator API
-  {
-    id: 'twoFactor-1',
-    endpointKey: 'twoFactor',
-    type: 'outage',
-    title: 'WebCrypto Subtle Engine Lock',
-    reason: 'HMAC-SHA1 token derivation isolate thread exhaustion',
-    description: 'Burst of concurrent 2FA token generation calls triggered thread starvation.',
-    statusCode: 500,
-    latencyMs: 88,
-    timestamp: 'Oct 02, 2026 · 18:40 UTC',
-    resolution: 'Isolate recycled; crypto pool restored in 60s',
-    dateCycle: '30d',
-  },
-  {
-    id: 'twoFactor-2',
-    endpointKey: 'twoFactor',
-    type: 'warning',
-    title: 'TOTP Client-Server Clock Skew',
-    reason: 'Time drifting beyond standard 30-second verification window',
-    description: 'Client device clock was 35s behind edge NTP time, requiring ±1 step tolerance window.',
-    statusCode: 400,
-    latencyMs: 44,
-    timestamp: 'Oct 07, 2026 · 11:20 UTC',
-    resolution: 'Tolerance window applied; verification passed',
-    dateCycle: '30d',
-  },
-  {
-    id: 'twoFactor-3',
-    endpointKey: 'twoFactor',
-    type: 'healthy',
-    title: 'RFC 6238 TOTP Calculation',
-    reason: 'Client-side zero-storage token calculation verified',
-    description: 'No TOTP secret stored in plaintext on edge.',
-    statusCode: 200,
-    latencyMs: 15,
-    timestamp: 'Oct 12, 2026 · 14:02 UTC',
-    resolution: 'Healthy edge transaction',
-    dateCycle: '24h',
-  },
-  {
-    id: 'twoFactor-4',
-    endpointKey: 'twoFactor',
-    type: 'healthy',
-    title: 'Token Secret Decryption Ping',
-    reason: 'Encrypted token payload unpacked cleanly',
-    description: 'Master key verified with zero errors.',
-    statusCode: 200,
-    latencyMs: 14,
-    timestamp: 'Oct 12, 2026 · 22:15 UTC',
-    resolution: 'Operating normally',
-    dateCycle: '1h',
-  },
-  {
-    id: 'twoFactor-5',
-    endpointKey: 'twoFactor',
-    type: 'warning',
-    title: 'TOTP Drift Tolerance Shift',
-    reason: 'Client NTP drift detected ±1 step',
-    description: 'Client token verified with automatic step compensation.',
-    statusCode: 400,
-    latencyMs: 42,
-    timestamp: 'Oct 12, 2026 · 21:50 UTC',
-    resolution: 'Compensated window verified successfully',
-    dateCycle: '1h',
-  },
-
-  // Auth & Session API
-  {
-    id: 'auth-1',
-    endpointKey: 'auth',
-    type: 'outage',
-    title: 'D1 Session Verification Timeout',
-    reason: 'Cloudflare Edge KV session replication lag caused auth endpoint response delays',
-    description: 'Worker isolated and traffic rerouted via fallback edge node.',
-    statusCode: 503,
-    latencyMs: 110,
-    timestamp: 'Oct 11, 2026 · 12:42 UTC',
-    resolution: 'Rerouted through adjacent Cloudflare edge node',
-    dateCycle: '24h',
-  },
-  {
-    id: 'auth-2',
-    endpointKey: 'auth',
-    type: 'warning',
-    title: 'Rate-Limit Challenge Triggered',
-    reason: 'Rapid repeated authentication attempts triggered edge security rule',
-    description: '5 failed login attempts in 10 seconds triggered Cloudflare IP rate limiting.',
-    statusCode: 429,
-    latencyMs: 62,
-    timestamp: 'Oct 09, 2026 · 16:30 UTC',
-    resolution: 'Automatic 5-minute cool-down applied',
-    dateCycle: '30d',
-  },
-  {
-    id: 'auth-3',
-    endpointKey: 'auth',
-    type: 'healthy',
-    title: 'JWT Session HMAC Verification',
-    reason: 'Valid signed session cookie authenticated at edge',
-    description: 'Cryptographic signature checked in sub-millisecond edge isolate.',
-    statusCode: 200,
-    latencyMs: 20,
-    timestamp: 'Oct 12, 2026 · 22:08 UTC',
-    resolution: 'Session valid and active',
-    dateCycle: '1h',
-  },
-  {
-    id: 'auth-4',
-    endpointKey: 'auth',
-    type: 'warning',
-    title: 'Session Token Challenge',
-    reason: 'Rapid consecutive session refresh pings',
-    description: '5 refreshes in 10s triggered soft challenge.',
-    statusCode: 429,
-    latencyMs: 55,
-    timestamp: 'Oct 12, 2026 · 21:42 UTC',
-    resolution: 'Challenge cool-down cleared in 10s',
-    dateCycle: '1h',
-  },
-
-  // Backup & Sync API
-  {
-    id: 'backup-1',
-    endpointKey: 'backup',
-    type: 'outage',
-    title: 'D1 Database Transaction Lockout',
-    reason: 'Concurrent schema backup read locked database connection',
-    description: 'Simultaneous note insert and full backup export caused 504 lock timeout.',
-    statusCode: 504,
-    latencyMs: 142,
-    timestamp: 'Sep 29, 2026 · 03:15 UTC',
-    resolution: 'Transaction auto-rolled back and completed on retry',
-    dateCycle: '1y',
-  },
-  {
-    id: 'backup-2',
-    endpointKey: 'backup',
-    type: 'warning',
-    title: 'Large Backup Payload Export Warning',
-    reason: 'Full database export approached memory buffer limit',
-    description: 'Streaming export used to avoid memory overflow in free-tier worker.',
-    statusCode: 200,
-    latencyMs: 52,
-    timestamp: 'Oct 06, 2026 · 21:00 UTC',
-    resolution: 'Streaming complete; no data loss',
-    dateCycle: '30d',
-  },
-  {
-    id: 'backup-3',
-    endpointKey: 'backup',
-    type: 'healthy',
-    title: 'Encrypted Vault Export Generated',
-    reason: 'AES-256 encrypted JSON archive generated',
-    description: 'All 23 assets validated and checksummed.',
-    statusCode: 200,
-    latencyMs: 31,
-    timestamp: 'Oct 12, 2026 · 11:20 UTC',
-    resolution: 'Healthy edge transaction',
-    dateCycle: '24h',
-  },
-  {
-    id: 'backup-4',
-    endpointKey: 'backup',
-    type: 'warning',
-    title: 'Backup Delta Serialization Delay',
-    reason: 'D1 write connection busy during concurrent note export',
-    description: 'Archive export paused for 3s to yield database lock.',
-    statusCode: 429,
-    latencyMs: 48,
-    timestamp: 'Oct 12, 2026 · 21:38 UTC',
-    resolution: 'Resumed and completed with zero data loss',
-    dateCycle: '1h',
-  },
-  {
-    id: 'backup-5',
-    endpointKey: 'backup',
-    type: 'healthy',
-    title: 'D1 Storage Sync Verified',
-    reason: 'Zero-knowledge encrypted export generated',
-    description: 'All vault items validated cleanly.',
-    statusCode: 200,
-    latencyMs: 29,
-    timestamp: 'Oct 12, 2026 · 22:14 UTC',
-    resolution: 'Operating normally',
-    dateCycle: '1h',
-  },
-
-  // Domains & DNS API
-  {
-    id: 'domains-1',
-    endpointKey: 'domains',
-    type: 'outage',
-    title: 'Cloudflare DNS API SSL Handshake Fail',
-    reason: 'Edge TLS certificate renewal handshake timeout',
-    description: 'Edge proxy failed to complete TLS negotiation with Cloudflare DNS management API.',
-    statusCode: 525,
-    latencyMs: 118,
-    timestamp: 'Oct 01, 2026 · 06:12 UTC',
-    resolution: 'Edge certificate refreshed; TLS renewed',
-    dateCycle: '30d',
-  },
-  {
-    id: 'domains-2',
-    endpointKey: 'domains',
-    type: 'warning',
-    title: 'Subdomain DNS Propagation Lag',
-    reason: 'External DNS nameservers took over 300s to propagate MX record',
-    description: 'Subdomain MX verification delayed pending global Anycast propagation.',
-    statusCode: 404,
-    latencyMs: 65,
-    timestamp: 'Oct 08, 2026 · 15:45 UTC',
-    resolution: 'Propagated globally within 380 seconds',
-    dateCycle: '30d',
-  },
-  {
-    id: 'domains-3',
-    endpointKey: 'domains',
-    type: 'healthy',
-    title: 'Zone DNS Record Verification',
-    reason: 'Custom domain DNS & SPF records verified',
-    description: 'Email routing TXT and MX records valid.',
-    statusCode: 200,
-    latencyMs: 22,
-    timestamp: 'Oct 12, 2026 · 12:10 UTC',
-    resolution: 'Operating normally',
-    dateCycle: '24h',
-  },
-  {
-    id: 'domains-4',
-    endpointKey: 'domains',
-    type: 'healthy',
-    title: 'Subdomain Health Probe OK',
-    reason: 'Anycast DNS query answered in 20ms',
-    description: 'Zone MX records valid.',
-    statusCode: 200,
-    latencyMs: 20,
-    timestamp: 'Oct 12, 2026 · 22:06 UTC',
-    resolution: 'Operating normally',
-    dateCycle: '1h',
-  },
-  {
-    id: 'domains-5',
-    endpointKey: 'domains',
-    type: 'warning',
-    title: 'Subdomain DNS Anycast Propagation',
-    reason: 'DNS lookup took 45s during Cloudflare edge sync',
-    description: 'Zone verification completed on subsequent query.',
-    statusCode: 404,
-    latencyMs: 49,
-    timestamp: 'Oct 12, 2026 · 21:44 UTC',
-    resolution: 'Record resolved globally',
-    dateCycle: '1h',
-  },
-];
+const HISTORICAL_ENDPOINT_RECORDS: ApiEndpointHistoryRecord[] = [];
 
 const getEndpointIcon = (category: string, color: string) => {
   switch (category) {
@@ -523,6 +134,7 @@ export const ApiEndpointHistoryModal: React.FC<ApiEndpointHistoryModalProps> = (
   const endpointRecords = useMemo(() => {
     const targetCategory = mapEndpointKeyToCategory(endpointKey);
 
+    const nowMs = Date.now();
     const liveTranslatedRecords: ApiEndpointHistoryRecord[] = recentLogs
       .filter((log) => log.category === targetCategory)
       .map((log) => {
@@ -534,6 +146,15 @@ export const ApiEndpointHistoryModal: React.FC<ApiEndpointHistoryModalProps> = (
           details: log.details,
         });
         const d = new Date(log.createdAt);
+        const ageMs = Number.isNaN(d.getTime()) ? Infinity : Math.max(0, nowMs - d.getTime());
+        const dateCycle: '1h' | '24h' | '30d' | '1y' =
+          ageMs <= 3600 * 1000
+            ? '1h'
+            : ageMs <= 24 * 3600 * 1000
+            ? '24h'
+            : ageMs <= 30 * 24 * 3600 * 1000
+            ? '30d'
+            : '1y';
         const formattedTs = Number.isNaN(d.getTime())
           ? log.createdAt
           : `${d.toLocaleDateString('en-US', {
@@ -563,7 +184,7 @@ export const ApiEndpointHistoryModal: React.FC<ApiEndpointHistoryModalProps> = (
           latencyMs: log.level === 'error' ? 92 : log.level === 'warning' ? 54 : 19,
           timestamp: formattedTs,
           resolution: log.resolution || desc.resolution,
-          dateCycle: '24h',
+          dateCycle,
         };
       });
 
@@ -633,117 +254,87 @@ export const ApiEndpointHistoryModal: React.FC<ApiEndpointHistoryModalProps> = (
     });
   }, [endpointRecords, searchQuery, severityFilter, timeFilter]);
 
-  // Generate authentic telemetry curve points with timestamps matching the selected range
+  // Generate telemetry points with flat baseline when no real incidents exist
   const graphData = useMemo<TelemetryGraphPoint[]>(() => {
-    const baseLatency = endpoint?.latencyMs || 25;
+    const baseLatency = endpoint?.latencyMs || 20;
     const records = endpointRecords;
 
+    const toSpikePoint = (
+      time: string,
+      incident: ApiEndpointHistoryRecord | undefined
+    ): TelemetryGraphPoint =>
+      incident
+        ? {
+            time,
+            latency: incident.latencyMs,
+            status: incident.type === 'outage' ? 'outage' : 'warning',
+            statusCode: incident.statusCode,
+            incidentTitle: incident.title,
+            incidentReason: incident.reason,
+          }
+        : {
+            time,
+            latency: baseLatency,
+            status: 'ok',
+            statusCode: 200,
+          };
+
     if (timeFilter === '1h') {
-      // 1 Hour window: 10-minute timestamp intervals
       const h1Incident = records.find(
         (r) => r.dateCycle === '1h' && (r.type === 'outage' || r.type === 'warning')
       );
       return [
-        { time: '21:20', latency: Math.max(12, baseLatency - 5), status: 'ok', statusCode: 200 },
-        { time: '21:30', latency: Math.max(14, baseLatency - 2), status: 'ok', statusCode: 200 },
-        {
-          time: '21:38',
-          latency: h1Incident ? h1Incident.latencyMs : Math.max(16, baseLatency + 16),
-          status: h1Incident?.type === 'outage' ? 'outage' : 'warning',
-          statusCode: h1Incident ? h1Incident.statusCode : 429,
-          incidentTitle: h1Incident?.title ?? 'Rate-Limit Soft Queue Throttle',
-          incidentReason: h1Incident?.reason ?? 'Temporary edge concurrency throttle',
-        },
-        { time: '21:45', latency: Math.max(14, baseLatency + 3), status: 'ok', statusCode: 200 },
-        { time: '21:52', latency: Math.max(15, baseLatency - 1), status: 'ok', statusCode: 200 },
-        { time: '22:05', latency: Math.max(12, baseLatency + 2), status: 'ok', statusCode: 200 },
-        { time: '22:18 (NOW)', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '-50m', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '-40m', latency: baseLatency, status: 'ok', statusCode: 200 },
+        toSpikePoint('-30m', h1Incident),
+        { time: '-20m', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '-10m', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: 'NOW', latency: baseLatency, status: 'ok', statusCode: 200 },
       ];
     }
 
     if (timeFilter === '24h') {
-      // Per Day (24 Hours): 4-hour timestamp intervals
       const dayIncident = records.find(
         (r) =>
           (r.dateCycle === '24h' || r.dateCycle === '1h') &&
           (r.type === 'outage' || r.type === 'warning')
       );
       return [
-        { time: '00:00', latency: Math.max(12, baseLatency - 8), status: 'ok', statusCode: 200 },
-        { time: '04:00', latency: Math.max(14, baseLatency - 6), status: 'ok', statusCode: 200 },
-        { time: '08:00', latency: Math.max(15, baseLatency - 2), status: 'ok', statusCode: 200 },
-        {
-          time: '12:00',
-          latency: dayIncident ? dayIncident.latencyMs : Math.max(18, baseLatency + 26),
-          status: dayIncident?.type === 'outage' ? 'outage' : 'warning',
-          statusCode: dayIncident ? dayIncident.statusCode : 429,
-          incidentTitle: dayIncident?.title ?? 'D1 Isolation Reconnect Lag',
-          incidentReason: dayIncident?.reason ?? 'Edge replica read lag',
-        },
-        { time: '16:00', latency: Math.max(15, baseLatency + 3), status: 'ok', statusCode: 200 },
-        { time: '20:00', latency: Math.max(14, baseLatency + 1), status: 'ok', statusCode: 200 },
+        { time: '00:00', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '04:00', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '08:00', latency: baseLatency, status: 'ok', statusCode: 200 },
+        toSpikePoint('12:00', dayIncident),
+        { time: '16:00', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '20:00', latency: baseLatency, status: 'ok', statusCode: 200 },
         { time: 'NOW', latency: baseLatency, status: 'ok', statusCode: 200 },
       ];
     }
 
     if (timeFilter === '30d') {
-      // Per Month (30 Days): Daily breakdown with confirmed historical incidents
-      const outageRec = records.find((r) => r.type === 'outage');
-      const warningRec = records.find((r) => r.type === 'warning');
+      const outageRec = records.find(
+        (r) => r.dateCycle !== '1y' && r.type === 'outage'
+      );
+      const warningRec = records.find(
+        (r) => r.dateCycle !== '1y' && r.type === 'warning'
+      );
       return [
-        { time: 'Sep 20', latency: Math.max(12, baseLatency - 6), status: 'ok', statusCode: 200 },
-        { time: 'Sep 25', latency: Math.max(14, baseLatency - 3), status: 'ok', statusCode: 200 },
-        {
-          time: 'Sep 29',
-          latency: outageRec ? outageRec.latencyMs : 142,
-          status: 'outage',
-          statusCode: outageRec ? outageRec.statusCode : 504,
-          incidentTitle: outageRec?.title ?? 'D1 Database Transaction Lockout',
-          incidentReason: outageRec?.reason ?? 'Simultaneous note insert and full backup export caused 504 timeout',
-        },
-        { time: 'Oct 02', latency: Math.max(14, baseLatency - 2), status: 'ok', statusCode: 200 },
-        { time: 'Oct 04', latency: Math.max(15, baseLatency + 3), status: 'ok', statusCode: 200 },
-        {
-          time: 'Oct 06',
-          latency: warningRec ? warningRec.latencyMs : 52,
-          status: 'warning',
-          statusCode: warningRec ? warningRec.statusCode : 200,
-          incidentTitle: warningRec?.title ?? 'Large Backup Payload Export Warning',
-          incidentReason: warningRec?.reason ?? 'Streaming export used to avoid memory overflow',
-        },
-        { time: 'Oct 09', latency: Math.max(14, baseLatency + 1), status: 'ok', statusCode: 200 },
-        { time: 'Oct 12', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '-25d', latency: baseLatency, status: 'ok', statusCode: 200 },
+        { time: '-20d', latency: baseLatency, status: 'ok', statusCode: 200 },
+        toSpikePoint('-15d', outageRec),
+        { time: '-10d', latency: baseLatency, status: 'ok', statusCode: 200 },
+        toSpikePoint('-5d', warningRec),
+        { time: 'Today', latency: baseLatency, status: 'ok', statusCode: 200 },
       ];
     }
 
-    // Per Year ('1y' or 'all'): Monthly timestamps across Year 2026
     const outageRec = records.find((r) => r.type === 'outage');
     const warningRec = records.find((r) => r.type === 'warning');
     return [
-      { time: 'Jan 2026', latency: Math.max(14, baseLatency - 7), status: 'ok', statusCode: 200 },
-      { time: 'Feb', latency: Math.max(14, baseLatency - 5), status: 'ok', statusCode: 200 },
-      { time: 'Mar', latency: Math.max(14, baseLatency - 4), status: 'ok', statusCode: 200 },
-      { time: 'Apr', latency: Math.max(15, baseLatency - 2), status: 'ok', statusCode: 200 },
-      { time: 'May', latency: Math.max(15, baseLatency - 3), status: 'ok', statusCode: 200 },
-      { time: 'Jun', latency: Math.max(16, baseLatency - 1), status: 'ok', statusCode: 200 },
-      { time: 'Jul', latency: Math.max(15, baseLatency - 2), status: 'ok', statusCode: 200 },
-      { time: 'Aug', latency: Math.max(16, baseLatency + 4), status: 'ok', statusCode: 200 },
-      {
-        time: 'Sep 2026',
-        latency: outageRec ? outageRec.latencyMs : 142,
-        status: 'outage',
-        statusCode: outageRec ? outageRec.statusCode : 504,
-        incidentTitle: outageRec?.title ?? 'D1 Transaction Lockout Incident',
-        incidentReason: outageRec?.reason ?? 'Concurrent schema backup read locked database connection',
-      },
-      {
-        time: 'Oct 2026',
-        latency: warningRec ? warningRec.latencyMs : 52,
-        status: 'warning',
-        statusCode: warningRec ? warningRec.statusCode : 200,
-        incidentTitle: warningRec?.title ?? 'Large Payload Streaming Warning',
-        incidentReason: warningRec?.reason ?? 'Full database export approached memory buffer limit',
-      },
+      { time: '-6m', latency: baseLatency, status: 'ok', statusCode: 200 },
+      { time: '-4m', latency: baseLatency, status: 'ok', statusCode: 200 },
+      toSpikePoint('-2m', outageRec),
+      toSpikePoint('-1m', warningRec),
+      { time: 'Current', latency: baseLatency, status: 'ok', statusCode: 200 },
     ];
   }, [endpoint?.latencyMs, endpointRecords, timeFilter]);
 

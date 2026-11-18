@@ -5,7 +5,6 @@ import {
   Checks,
   EnvelopeOpen,
   EnvelopeSimple,
-  FastForward,
   PaperPlaneTilt,
   Tray,
 } from '@phosphor-icons/react';
@@ -261,8 +260,8 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                         </div>
 
                         {/* Status Badge */}
-                        <div className="shrink-0">
-                          {isNoneTarget ? (
+                        {isNoneTarget && (
+                          <div className="shrink-0">
                             <span
                               className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${
                                 isUnread
@@ -273,17 +272,8 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                               <Tray size={10} weight="bold" />
                               <span>Inbox</span>
                             </span>
-                          ) : (
-                            /* Fixed: Distinct icon without the word "Forwarded" */
-                            <span
-                              title={`Forwarded to ${item.forwardTo}`}
-                              aria-label={`Forwarded to ${item.forwardTo}`}
-                              className="inline-flex items-center justify-center h-5 w-5 rounded bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 shrink-0"
-                            >
-                              <FastForward size={11} weight="duotone" />
-                            </span>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -401,7 +391,7 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                         </div>
                       </div>
 
-                      {isNoneTarget ? (
+                      {isNoneTarget && (
                         <span
                           className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors shrink-0 ${
                             isUnread
@@ -411,15 +401,6 @@ export const MailActivityList: React.FC<MailActivityListProps> = ({
                         >
                           <Tray size={12} weight="bold" />
                           <span>Inbox</span>
-                        </span>
-                      ) : (
-                        /* Fixed: Distinct icon without the word "Forwarded" */
-                        <span
-                          title={`Forwarded to ${item.forwardTo}`}
-                          aria-label={`Forwarded to ${item.forwardTo}`}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)] shrink-0 transition-transform duration-150 group-hover:scale-105"
-                        >
-                          <FastForward size={13} weight="duotone" />
                         </span>
                       )}
                     </div>

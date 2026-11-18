@@ -596,8 +596,8 @@ export const dashboardService = {
     const activeWindowCutoff = now - 15 * 60 * 1000; // 15-minute live incident window for current status
     const chartWindowCutoff = now - 60 * 60 * 1000;  // 1-hour live telemetry window for chart curves
 
-    const parsedIncidents = recentAuditLogs
-      .filter((l) => (l.level === 'error' || l.level === 'warning') && !l.id.startsWith('audit_'))
+    const parsedAllEvents = recentAuditLogs
+      .filter((l) => !l.id.startsWith('audit_'))
       .map((l) => {
         const timeMs = new Date(l.createdAt).getTime();
         return {
@@ -608,11 +608,18 @@ export const dashboardService = {
       })
       .filter((item) => !isNaN(item.timeMs));
 
+    const parsedIncidents = parsedAllEvents.filter(
+      (item) => item.log.level === 'error' || item.log.level === 'warning'
+    );
+
     // Active incidents (last 15 minutes) determine current endpoint card status
     const activeIncidents = parsedIncidents.filter((item) => item.timeMs >= activeWindowCutoff);
 
-    // Recent session incidents (last 1 hour) appear as spikes on the live chart
+    // Recent session incidents (last 1 hour) appear as incident dots on the live chart
     const incidentItems = parsedIncidents.filter((item) => item.timeMs >= chartWindowCutoff);
+
+    // All real events (info, warning, error) within the last 1 hour drive discrete spikes on the chart
+    const chartEvents = parsedAllEvents.filter((item) => item.timeMs >= chartWindowCutoff);
 
     const countByCategory = (
       list: typeof parsedIncidents,
@@ -643,9 +650,9 @@ export const dashboardService = {
     const windowEndMs: number = now;
     let totalWindowMs: number;
 
-    if (incidentItems.length > 0) {
-      const minIncidentTime = Math.min(...incidentItems.map((item) => item.timeMs));
-      const rawSpanMs = Math.max(0, windowEndMs - minIncidentTime);
+    if (chartEvents.length > 0) {
+      const minEventTime = Math.min(...chartEvents.map((item) => item.timeMs));
+      const rawSpanMs = Math.max(0, windowEndMs - minEventTime);
       const effectiveSpanMs = Math.max(15 * 60 * 1000, Math.round(rawSpanMs * 1.25));
       windowStartMs = windowEndMs - effectiveSpanMs;
       totalWindowMs = windowEndMs - windowStartMs;
@@ -654,7 +661,18 @@ export const dashboardService = {
       windowStartMs = windowEndMs - totalWindowMs;
     }
 
-    // Map each real incident to its corresponding timeline slot (0-31) by real timestamp
+    // Map each real event/incident to its exact timeline slot (0-31) by real timestamp
+    const slotToEvents = new Map<number, typeof chartEvents>();
+    if (chartEvents.length > 0 && totalWindowMs > 0) {
+      for (const evt of chartEvents) {
+        const fraction = (evt.timeMs - windowStartMs) / totalWindowMs;
+        const closestSlot = Math.max(0, Math.min(31, Math.round(fraction * 31)));
+        const existing = slotToEvents.get(closestSlot) ?? [];
+        existing.push(evt);
+        slotToEvents.set(closestSlot, existing);
+      }
+    }
+
     const slotToIncidents = new Map<number, typeof incidentItems>();
     if (incidentItems.length > 0 && totalWindowMs > 0) {
       for (const inc of incidentItems) {
@@ -666,10 +684,7 @@ export const dashboardService = {
       }
     }
 
-    // Time decay radius in ms for incident curves
-    const sigmaMs = Math.max(25 * 1000, (totalWindowMs / 31) * 1.4);
-
-    // Generate the 32 high-resolution timeline points based on REAL timestamps
+    // Generate the 32 high-resolution timeline points based on REAL timestamps (flat baseline + discrete event spikes)
     const history: ApiLiveTelemetryPointDto[] = Array.from({ length: 32 }, (_, i) => {
       const slotTimeMs = windowStartMs + Math.round((i / 31) * totalWindowMs);
       const slotDate = new Date(slotTimeMs);
@@ -679,28 +694,29 @@ export const dashboardService = {
         second: '2-digit',
       });
 
-      // Organic subtle base variation per API anchored around live probe latencies
-      let notesLat = Math.round(notesProbe.latencyMs + 2 * Math.sin(i * 0.45));
-      let mailLat = Math.round(mailProbe.latencyMs + 2 * Math.sin(i * 0.35 + 1.2));
-      let twoFactorLat = Math.round(twoFactorProbe.latencyMs + 2 * Math.sin(i * 0.5 + 2.1));
-      let authLat = Math.round(authProbe.latencyMs + 2 * Math.sin(i * 0.4 + 0.8));
-      let backupLat = Math.round(backupProbe.latencyMs + 2 * Math.sin(i * 0.3 + 3.2));
-      let domainsLat = Math.round(domainsProbe.latencyMs + 2 * Math.sin(i * 0.42 + 4.0));
+      // Flat baselines anchored to live probe latencies (no synthetic sine waves)
+      let notesLat = notesProbe.latencyMs;
+      let mailLat = mailProbe.latencyMs;
+      let twoFactorLat = twoFactorProbe.latencyMs;
+      let authLat = authProbe.latencyMs;
+      let backupLat = backupProbe.latencyMs;
+      let domainsLat = domainsProbe.latencyMs;
 
-      // Calculate latency elevation organically from REAL incident timestamps
-      for (const inc of incidentItems) {
-        const diffMs = Math.abs(slotTimeMs - inc.timeMs);
-        const factor = Math.exp(-Math.pow(diffMs / sigmaMs, 2));
-        if (factor > 0.02) {
-          const singleAmp = inc.log.level === 'error' ? 36 : 18;
-          const bump = Math.round(singleAmp * factor);
-          if (inc.endpoint.key === 'notes') notesLat += bump;
-          else if (inc.endpoint.key === 'mail') mailLat += bump;
-          else if (inc.endpoint.key === 'twoFactor') twoFactorLat += bump;
-          else if (inc.endpoint.key === 'auth') authLat += bump;
-          else if (inc.endpoint.key === 'backup') backupLat += bump;
-          else if (inc.endpoint.key === 'domains') domainsLat += bump;
-        }
+      // Apply discrete latency elevation ONLY on the exact slots where real events occurred
+      const slotEvents = slotToEvents.get(i) ?? [];
+      for (const evt of slotEvents) {
+        const bump =
+          evt.log.level === 'error'
+            ? 42
+            : evt.log.level === 'warning'
+            ? 22
+            : 10;
+        if (evt.endpoint.key === 'notes') notesLat += bump;
+        else if (evt.endpoint.key === 'mail') mailLat += bump;
+        else if (evt.endpoint.key === 'twoFactor') twoFactorLat += bump;
+        else if (evt.endpoint.key === 'auth') authLat += bump;
+        else if (evt.endpoint.key === 'backup') backupLat += bump;
+        else if (evt.endpoint.key === 'domains') domainsLat += bump;
       }
 
       // Clamp latencies to realistic upper ceilings

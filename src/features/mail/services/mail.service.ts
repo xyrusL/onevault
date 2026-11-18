@@ -24,7 +24,18 @@ interface MailCacheSnapshot {
   forwardTargets: ForwardTarget[];
 }
 
-const CACHE_STORAGE_KEY = 'onevault.mail.cache.v1';
+const LEGACY_CACHE_STORAGE_KEY_V1 = 'onevault.mail.cache.v1';
+const LEGACY_CACHE_STORAGE_KEY_V2 = 'onevault.mail.cache.v2';
+const CACHE_STORAGE_KEY = 'onevault.mail.cache.v3';
+
+// Clean up legacy mail caches and persisted filter state from earlier local builds
+try {
+  localStorage.removeItem(LEGACY_CACHE_STORAGE_KEY_V1);
+  localStorage.removeItem(LEGACY_CACHE_STORAGE_KEY_V2);
+  localStorage.removeItem('onevault.mail.filters');
+} catch {
+  // Ignore storage errors
+}
 
 let memoryCache: MailCacheSnapshot | null = (() => {
   try {
@@ -49,7 +60,12 @@ function persistCache(partial: Partial<MailCacheSnapshot>) {
 }
 
 function toItem(dto: MailAccountDto): MailAccountItem {
-  const created = new Date(dto.createdAt);
+  const raw = dto.createdAt;
+  const normalizedTs =
+    raw && !raw.includes('T') && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(raw)
+      ? `${raw.replace(' ', 'T')}Z`
+      : raw;
+  const created = new Date(normalizedTs);
   const isValidDate = !isNaN(created.getTime());
   return {
     id: dto.id,

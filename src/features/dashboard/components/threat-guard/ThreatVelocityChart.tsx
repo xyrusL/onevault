@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AreaChart,
   Area,
+  CartesianGrid,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -64,6 +65,11 @@ export const ThreatVelocityChart: React.FC<ThreatVelocityChartProps> = ({
             </linearGradient>
           </defs>
 
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(255, 255, 255, 0.05)"
+            vertical={false}
+          />
           <XAxis
             dataKey="time"
             tickLine={false}
@@ -74,15 +80,15 @@ export const ThreatVelocityChart: React.FC<ThreatVelocityChartProps> = ({
             dy={4}
           />
           <YAxis
-            domain={[0, 'dataMax + 25']}
+            domain={[0, (dataMax: number) => Math.max(10, dataMax + 5)]}
             tick={{ fontSize: 9.5, fill: '#71717a' }}
             axisLine={false}
             tickLine={false}
           />
 
-          {/* 1. Legitimate Traffic Area (Emerald) — Zero hover dots */}
+          {/* 1. Legitimate Traffic Area (Emerald) — Linear event-driven line */}
           <Area
-            type="monotone"
+            type="linear"
             dataKey="legitimate"
             stroke="#10b981"
             strokeWidth={2}
@@ -92,9 +98,9 @@ export const ThreatVelocityChart: React.FC<ThreatVelocityChartProps> = ({
             activeDot={false}
           />
 
-          {/* 2. Scanners & Rate-Limits (Amber) — Only hover this single dot when cursor touches it */}
+          {/* 2. Scanners & Rate-Limits (Amber) — Linear event-driven line */}
           <Area
-            type="monotone"
+            type="linear"
             dataKey="scans"
             stroke="#f59e0b"
             strokeWidth={2}
@@ -173,9 +179,9 @@ export const ThreatVelocityChart: React.FC<ThreatVelocityChartProps> = ({
             }}
           />
 
-          {/* 3. Exploits Dropped (Rose / Red) — Only hover this single dot when cursor touches it */}
+          {/* 3. Exploits Dropped (Rose / Red) — Linear event-driven line */}
           <Area
-            type="monotone"
+            type="linear"
             dataKey="exploits"
             stroke="#f43f5e"
             strokeWidth={2.2}

@@ -8,8 +8,8 @@ import type {
   UpdateNotePayload,
 } from '../types/notes.types';
 
-const NOTES_CACHE_KEY = 'onevault.notes.cache.v2';
-const FOLDERS_CACHE_KEY = 'onevault.note-folders.cache.v2';
+const NOTES_CACHE_KEY = 'onevault.notes.cache.v3';
+const FOLDERS_CACHE_KEY = 'onevault.note-folders.cache.v3';
 
 /**
  * Converts empty strings or the virtual `'__none__'` filter sentinel into `null`.
@@ -46,6 +46,7 @@ interface NotesCache {
 let memoryNotes: Note[] | null = (() => {
   try {
     localStorage.removeItem('onevault.notes.cache.v1');
+    localStorage.removeItem('onevault.notes.cache.v2');
     const raw = localStorage.getItem(NOTES_CACHE_KEY);
     return raw ? (JSON.parse(raw) as Note[]) : null;
   } catch {
@@ -55,6 +56,7 @@ let memoryNotes: Note[] | null = (() => {
 
 let memoryFolders: NoteFolder[] | null = (() => {
   try {
+    localStorage.removeItem('onevault.note-folders.cache.v2');
     const raw = localStorage.getItem(FOLDERS_CACHE_KEY);
     return raw ? (JSON.parse(raw) as NoteFolder[]) : null;
   } catch {

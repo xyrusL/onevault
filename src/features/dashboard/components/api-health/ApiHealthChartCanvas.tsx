@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Area,
   AreaChart,
+  CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -54,16 +55,21 @@ export const ApiHealthChartCanvas: React.FC<ApiHealthChartCanvasProps> = ({
                   stopColor={ep.color}
                   stopOpacity={
                     selectedKeys.length === 1
-                      ? 0.42
+                      ? 0.35
                       : selectedKeys.length === 2
-                      ? 0.28
-                      : 0.16
+                      ? 0.22
+                      : 0.05
                   }
                 />
                 <stop offset="95%" stopColor={ep.color} stopOpacity={0.0} />
               </linearGradient>
             ))}
           </defs>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(255, 255, 255, 0.05)"
+            vertical={false}
+          />
           <XAxis
             dataKey="time"
             tickLine={false}
@@ -201,20 +207,20 @@ export const ApiHealthChartCanvas: React.FC<ApiHealthChartCanvasProps> = ({
             }}
           />
 
-          {/* Monotone curves and red/orange incident dots */}
+          {/* Crisp linear event-driven lines and red/orange incident dots */}
           {activeCurves.map((ep) => (
             <Area
               key={ep.key}
-              type="monotone"
+              type="linear"
               dataKey={ep.key}
               name={ep.name}
               stroke={ep.color}
               strokeWidth={
                 selectedKeys.length === 1
-                  ? 2.5
-                  : selectedKeys.includes(ep.key)
                   ? 2.2
-                  : 1.8
+                  : selectedKeys.includes(ep.key)
+                  ? 2.0
+                  : 1.5
               }
               fill={`url(#${ep.gradientId})`}
               dot={(props: any) => {
