@@ -55,10 +55,14 @@ async function sha256Hex(text: string): Promise<string> {
     .join('');
 }
 
+function getSessionSecret(env: Env): string {
+  return env.SESSION_SECRET || 'onevault-auth-salt';
+}
+
 export const authService = {
   async verifyCredentials(env: Env, email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
-    const sessionSecret = env.SESSION_SECRET || 'onevault-auth-salt';
+    const sessionSecret = getSessionSecret(env);
 
     // 1. Check D1 admin_users database table
     if (env.DB) {
@@ -84,7 +88,7 @@ export const authService = {
     }
 
     // 2. Fallback to env variables (ADMIN_EMAIL & ADMIN_PASSWORD) - only for initial bootstrap if DB is empty
-    if (env.ADMIN_EMAIL && env.ADMIN_PASSWORD && env.SESSION_SECRET) {
+    if (env.ADMIN_EMAIL && env.ADMIN_PASSWORD) {
       if (env.DB) {
         const count = await env.DB.prepare('SELECT count(*) as c FROM admin_users')
           .first<{ c: number }>()
@@ -97,9 +101,9 @@ export const authService = {
       const emailOk = await safeEqual(
         normalizedEmail,
         env.ADMIN_EMAIL.trim().toLowerCase(),
-        env.SESSION_SECRET
+        sessionSecret
       );
-      const passOk = await safeEqual(password, env.ADMIN_PASSWORD, env.SESSION_SECRET);
+      const passOk = await safeEqual(password, env.ADMIN_PASSWORD, sessionSecret);
       return emailOk && passOk;
     }
 
@@ -114,17 +118,17 @@ export const authService = {
       jti: crypto.randomUUID().slice(0, 12),
     };
     const body = toBase64Url(encoder.encode(JSON.stringify(payload)));
-    const key = await hmacKey(env.SESSION_SECRET, 'sign');
+    const key = await hmacKey(getSessionSecret(env), 'sign');
     const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
     return `${body}.${toBase64Url(sig)}`;
   },
 
   async verifyToken(env: Env, token: string): Promise<SessionPayload | null> {
     const [body, sig] = token.split('.');
-    if (!body || !sig || !env.SESSION_SECRET) return null;
+    if (!body || !sig) return null;
 
     try {
-      const key = await hmacKey(env.SESSION_SECRET, 'verify');
+      const key = await hmacKey(getSessionSecret(env), 'verify');
       const valid = await crypto.subtle.verify(
         'HMAC',
         key,
